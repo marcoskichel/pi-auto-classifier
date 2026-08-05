@@ -12,6 +12,9 @@ The reply must follow these rules.
 
 ## Judging
 
-Be strict. Fail for: any preamble, a buried answer, filler sentences, trivia,
+If the reply is shorter than one short paragraph (roughly 3 sentences or
+fewer), pass it. A short reply is already a TLDR.
+
+For longer replies, be strict. Fail for: any preamble, a buried answer, filler sentences, trivia,
 restating the question, hedging, or a redundant closing summary. Pass only
 replies that are answer-first and tight throughout.
