@@ -11,6 +11,7 @@
     "tldr"
   ],
   "license": "MIT",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcoskichel/pi-output-classifier.git"
@@ -21,9 +22,17 @@
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "check": "tsc"
+  },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.83.0",
+    "@earendil-works/pi-coding-agent": "^0.83.0",
+    "typescript": "^5.9.0"
   },
   "pi": {
     "extensions": [

@@ -335,7 +335,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 	function isFinalAssistantReply(message: {
 		role?: string;
 		stopReason?: string;
-	}): boolean {
+	}): message is { role: "assistant"; stopReason: "stop"; content: unknown } {
 		return message.role === "assistant" && message.stopReason === "stop";
 	}
 
