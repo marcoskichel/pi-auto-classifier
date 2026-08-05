@@ -1,0 +1,17 @@
+# Changelog
+
+## [0.2.0](https://github.com/marcoskichel/pi-output-classifier/compare/pi-output-classifier-v0.1.0...pi-output-classifier-v0.2.0) (2026-08-05)
+
+
+### Features
+
+* add classifier initial implementation ([e1d4181](https://github.com/marcoskichel/pi-output-classifier/commit/e1d41819d940039d35639e94789287b88b071235))
+* add package.json for npm publishing and pi.dev gallery ([#2](https://github.com/marcoskichel/pi-output-classifier/issues/2)) ([bfd3920](https://github.com/marcoskichel/pi-output-classifier/commit/bfd3920f3b32634d964169d2368dfd18dc65ac80))
+* add release-please workflow with npm OIDC publishing ([#3](https://github.com/marcoskichel/pi-output-classifier/issues/3)) ([a625ab3](https://github.com/marcoskichel/pi-output-classifier/commit/a625ab373d23396d4e0f80d200a59f934af424ae))
+* block at most once per rule ([#6](https://github.com/marcoskichel/pi-output-classifier/issues/6)) ([e8028de](https://github.com/marcoskichel/pi-output-classifier/commit/e8028de059a9c792ec785d9c51e4b36082072e94))
+
+
+### Bug Fixes
+
+* change toggle shortcut to ctrl+alt+b to avoid built-in ctrl+b conflict ([#5](https://github.com/marcoskichel/pi-output-classifier/issues/5)) ([4076ad8](https://github.com/marcoskichel/pi-output-classifier/commit/4076ad8c1efe4a8d399c1c534fb74bcea6b8cf78))
+* shortcut toggle ([69da7ea](https://github.com/marcoskichel/pi-output-classifier/commit/69da7ea74a50aeab286d203f2620ef73738b5fe3))

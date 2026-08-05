@@ -1,19 +1,33 @@
 {
   "name": "pi-output-classifier",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pi extension that classifies every final assistant reply against markdown output rules and asks the model to rewrite violations. Ships with an ASD-STE100 Simplified Technical English + TLDR rule.",
-  "keywords": ["pi-package", "pi", "pi-extension", "coding-agent", "output-rules", "tldr"],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "coding-agent",
+    "output-rules",
+    "tldr"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcoskichel/pi-output-classifier.git"
   },
-  "files": ["index.ts", "rules", "README.md", "LICENSE"],
+  "files": [
+    "index.ts",
+    "rules",
+    "README.md",
+    "LICENSE"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*"
   },
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   }
 }
