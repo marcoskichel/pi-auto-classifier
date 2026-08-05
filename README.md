@@ -2,7 +2,7 @@
 
 A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against a set of output rules. When a reply violates the rules, the extension withholds it and asks the model to rewrite it (up to 2 attempts).
 
-Ships with one rule: [ASD-STE100 Simplified Technical English + TLDR](rules/ste-tldr.md) — active voice, short sentences, answer first, no filler.
+Ships with two rules: [ASD-STE100 Simplified Technical English](rules/ste.md) (active voice, short sentences) and [TLDR](rules/tldr.md) (answer first, no filler).
 
 ## How it works
 
@@ -38,7 +38,7 @@ Rules are markdown files. All `.md` files in these directories are loaded (globa
 | `rules/` (inside this repo) | global, bundled |
 | `<project>/.pi/output-rules/` | per project |
 
-Drop a new `.md` file in either directory to add a rule. See [rules/ste-tldr.md](rules/ste-tldr.md) for the format — plain prose the classifier model can judge against.
+Drop a new `.md` file in either directory to add a rule. See [rules/tldr.md](rules/tldr.md) for the format — plain prose the classifier model can judge against.
 
 ## Configuration
 
