@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import { complete } from "@earendil-works/pi-ai/compat";
 import { CONFIG_DIR_NAME, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -14,7 +15,7 @@ const MIN_REPLY_LENGTH = 40;
 const STATUS_KEY = "output-classifier";
 const FEEDBACK_MESSAGE_TYPE = "output-classifier";
 const PROJECT_RULES_DIR = path.join(".pi", "output-rules");
-const GLOBAL_RULES_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), "rules");
+const GLOBAL_RULES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "rules");
 
 type Rule = { name: string; text: string };
 type Verdict = { pass: boolean; violations: string[] };
@@ -177,6 +178,17 @@ function buildRewriteFeedback(draft: string, violations: string[]): string {
 	].join("\n");
 }
 
+// ponytail: relies on pi emitting extension events before TUI listeners with a shared
+// message reference, and on message_update carrying a per-event shallow copy of the
+// partial message (agent-loop.js). If pi ever clones events for extensions, drafts
+// become visible again during streaming and this needs a real upstream hide API.
+function maskDraftText(message: { role?: string; content?: unknown }): void {
+	if (!Array.isArray(message.content)) {
+		return;
+	}
+	message.content = message.content.map((block) => (isTextBlock(block) ? { ...block, text: "" } : block));
+}
+
 function withheldPlaceholder(message: { content: unknown }): object {
 	return {
 		...message,
@@ -297,6 +309,14 @@ export default function outputClassifier(pi: ExtensionAPI) {
 			rewriteAttempts = 0;
 		}
 	});
+
+	const hideStreamingDraft = async (event: { message: { role?: string; content?: unknown } }) => {
+		if (isEnabled && rules.length > 0 && event.message.role === "assistant") {
+			maskDraftText(event.message);
+		}
+	};
+	pi.on("message_start", hideStreamingDraft);
+	pi.on("message_update", hideStreamingDraft);
 
 	pi.on("message_end", async (event, ctx) => {
 		if (!isEnabled || rules.length === 0 || !isFinalAssistantReply(event.message)) {
