@@ -186,7 +186,7 @@ function withheldPlaceholder(message: { content: unknown }): object {
 
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
-const BADGE_WIDTH = 22;
+const TOGGLE_SHORTCUT = "ctrl+b";
 
 export default function outputClassifier(pi: ExtensionAPI) {
 	let rules: Rule[] = [];
@@ -209,18 +209,22 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		if (!ctx.hasUI || requestBadgeRender) {
 			return;
 		}
-		void ctx.ui.custom(
+		ctx.ui.setWidget(
+			STATUS_KEY,
 			(tui, theme) => {
 				requestBadgeRender = () => tui.requestRender();
 				return {
 					render(width: number) {
-						const pad = " ".repeat(Math.max(0, width - badgeText.length));
-						return [pad + theme.fg(isEnabled ? "accent" : "dim", badgeText)];
+						const hint = `${TOGGLE_SHORTCUT} to toggle`;
+						const plain = `${badgeText}  ${hint}`;
+						const pad = " ".repeat(Math.max(0, width - plain.length));
+						const styled = theme.fg(isEnabled ? "accent" : "dim", badgeText) + theme.fg("dim", `  ${hint}`);
+						return [pad + styled];
 					},
 					invalidate() {},
 				};
 			},
-			{ overlay: true, overlayOptions: { anchor: "top-right", width: BADGE_WIDTH } },
+			{ placement: "belowEditor" },
 		);
 	}
 
@@ -329,7 +333,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		handler: async (_args, ctx) => toggle(ctx),
 	});
 
-	pi.registerShortcut("ctrl+alt+t", {
+	pi.registerShortcut(TOGGLE_SHORTCUT, {
 		description: "Toggle the output classifier",
 		handler: async (ctx) => toggle(ctx),
 	});
