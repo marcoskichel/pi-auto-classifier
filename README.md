@@ -1,6 +1,6 @@
 # pi-output-classifier
 
-A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. Each rule can force a rewrite once per user turn; after that the reply passes through with a warning. Classifier errors fail open.
+A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. It keeps asking for rewrites until the reply passes. Classifier errors fail open.
 
 Ships with one rule: [ASD-STE100 Simplified Technical English + TLDR](rules/ste-tldr.md) — active voice, short sentences, answer first, no filler.
 
