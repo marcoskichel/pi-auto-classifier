@@ -5,7 +5,8 @@
 		"target": "es2023",
 		"strict": true,
 		"noEmit": true,
+		"allowImportingTsExtensions": true,
 		"skipLibCheck": true
 	},
-	"include": ["index.ts"]
+	"include": ["index.ts", "test.ts"]
 }
