@@ -8,6 +8,7 @@ import {
 	CONFIG_DIR_NAME,
 	type ExtensionAPI,
 	type ExtensionContext,
+	type Theme,
 } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_MODEL_SPEC = "anthropic/claude-haiku-4-5";
@@ -27,13 +28,17 @@ const GLOBAL_RULES_DIR = path.join(
 	path.dirname(fileURLToPath(import.meta.url)),
 	"rules",
 );
+const ENABLED_MARK = "\u25CF";
+const DISABLED_MARK = "\u25CB";
+const BADGE_HINT = "/classifier to toggle";
 
 type Rule = { name: string; text: string };
 type Violation = { rule: string; reason: string };
 type Verdict = { pass: boolean; violations: Violation[] };
 type ClassifierConfig = { model?: string };
-
 type TextBlock = { type: "text"; text: string };
+type DraftMessage = { role?: string; content?: unknown };
+type EndedMessage = DraftMessage & { stopReason?: string };
 
 function debugLog(line: string): void {
 	if (DEBUG_LOG_PATH) {
@@ -126,6 +131,17 @@ function buildClassifierPrompt(rules: Rule[], reply: string): string {
 	].join("\n");
 }
 
+function toViolation(entry: unknown): Violation {
+	if (typeof entry === "string") {
+		return { rule: "unspecified", reason: entry };
+	}
+	const fields = entry as { rule?: unknown; reason?: unknown };
+	return {
+		rule: typeof fields.rule === "string" ? fields.rule : "unspecified",
+		reason: typeof fields.reason === "string" ? fields.reason : "rule violated",
+	};
+}
+
 function parseVerdict(raw: string): Verdict {
 	const jsonCandidate = raw.match(/\{[\s\S]*\}/)?.[0];
 	if (!jsonCandidate) {
@@ -137,23 +153,40 @@ function parseVerdict(raw: string): Verdict {
 			pass?: boolean;
 			violations?: unknown[];
 		};
-		const violations = (
-			Array.isArray(parsed.violations) ? parsed.violations : []
-		).map((entry): Violation => {
-			if (typeof entry === "string") {
-				return { rule: "unspecified", reason: entry };
-			}
-			const obj = entry as { rule?: unknown; reason?: unknown };
-			return {
-				rule: typeof obj.rule === "string" ? obj.rule : "unspecified",
-				reason: typeof obj.reason === "string" ? obj.reason : "rule violated",
-			};
-		});
-		return { pass: parsed.pass !== false, violations };
+		const entries = Array.isArray(parsed.violations) ? parsed.violations : [];
+		return {
+			pass: parsed.pass !== false,
+			violations: entries.map(toViolation),
+		};
 	} catch {
 		debugLog(`invalid verdict JSON: ${jsonCandidate}`);
 		return { pass: true, violations: [] };
 	}
+}
+
+function userMessage(text: string) {
+	return {
+		role: "user" as const,
+		content: [{ type: "text" as const, text }],
+		timestamp: Date.now(),
+	};
+}
+
+async function resolveModelAuth(ctx: ExtensionContext, modelSpec: string) {
+	const [provider, ...modelIdParts] = modelSpec.split("/");
+	const model = ctx.modelRegistry.find(provider, modelIdParts.join("/"));
+	if (!model) {
+		debugLog(`model not found: ${modelSpec}`);
+		return undefined;
+	}
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+	if (!auth.ok || !auth.apiKey) {
+		debugLog(
+			`no auth for ${modelSpec}: ${auth.ok ? "missing key" : auth.error}`,
+		);
+		return undefined;
+	}
+	return { model, apiKey: auth.apiKey, headers: auth.headers, env: auth.env };
 }
 
 async function requestVerdict(
@@ -161,53 +194,22 @@ async function requestVerdict(
 	modelSpec: string,
 	prompt: string,
 ): Promise<Verdict> {
-	const [provider, ...modelIdParts] = modelSpec.split("/");
-	const model = ctx.modelRegistry.find(provider, modelIdParts.join("/"));
-	if (!model) {
-		debugLog(`model not found: ${modelSpec}`);
+	const resolved = await resolveModelAuth(ctx, modelSpec);
+	if (!resolved) {
 		return { pass: true, violations: [] };
 	}
-
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-	if (!auth.ok || !auth.apiKey) {
-		debugLog(
-			`no auth for ${modelSpec}: ${auth.ok ? "missing key" : auth.error}`,
-		);
-		return { pass: true, violations: [] };
-	}
-
 	const response = await complete(
-		model,
-		{
-			messages: [
-				{
-					role: "user",
-					content: [{ type: "text", text: prompt }],
-					timestamp: Date.now(),
-				},
-			],
-		},
-		{
-			apiKey: auth.apiKey,
-			headers: auth.headers,
-			env: auth.env,
-			sessionId: uuidv7(),
-		},
+		resolved.model,
+		{ messages: [userMessage(prompt)] },
+		{ ...resolved, sessionId: uuidv7() },
 	);
-
 	if (response.stopReason === "error") {
 		throw new Error(
 			(response as { errorMessage?: string }).errorMessage ??
 				"classifier request failed",
 		);
 	}
-
-	const verdict = parseVerdict(
-		response.content
-			.filter(isTextBlock)
-			.map((block) => block.text)
-			.join("\n"),
-	);
+	const verdict = parseVerdict(textFromContent(response.content));
 	debugLog(`verdict: ${JSON.stringify(verdict)}`);
 	return verdict;
 }
@@ -230,11 +232,11 @@ function buildRewriteFeedback(draft: string, violations: Violation[]): string {
 	].join("\n");
 }
 
-// ponytail: relies on pi emitting extension events before TUI listeners with a shared
-// message reference, and on message_update carrying a per-event shallow copy of the
-// partial message (agent-loop.js). If pi ever clones events for extensions, drafts
-// become visible again during streaming and this needs a real upstream hide API.
-function maskDraftText(message: { role?: string; content?: unknown }): void {
+/* ponytail: relies on pi emitting extension events before TUI listeners with a shared
+   message reference, and on message_update carrying a per-event shallow copy of the
+   partial message (agent-loop.js). If pi ever clones events for extensions, drafts
+   become visible again during streaming and this needs a real upstream hide API. */
+function maskDraftText(message: DraftMessage): void {
 	if (!Array.isArray(message.content)) {
 		return;
 	}
@@ -243,7 +245,7 @@ function maskDraftText(message: { role?: string; content?: unknown }): void {
 	);
 }
 
-function withheldPlaceholder(message: { content: unknown }): object {
+function withheldPlaceholder<T extends object>(message: T): T {
 	return {
 		...message,
 		content: [
@@ -252,63 +254,135 @@ function withheldPlaceholder(message: { content: unknown }): object {
 				text: "(draft withheld by output classifier, rewriting)",
 			},
 		],
-	};
+	} as T;
 }
 
-const ENABLED_MARK = "\u25CF";
-const DISABLED_MARK = "\u25CB";
+function isFinalAssistantReply(message: EndedMessage): boolean {
+	return message.role === "assistant" && message.stopReason === "stop";
+}
 
-export default function outputClassifier(pi: ExtensionAPI) {
-	let rules: Rule[] = [];
-	let modelSpec = DEFAULT_MODEL_SPEC;
-	let isEnabled = true;
-	// Each rule may force a rewrite only once per user turn.
-	let blockedRules = new Set<string>();
-	let badgeText = "";
-	let requestBadgeRender: (() => void) | undefined;
+class Classifier {
+	private rules: Rule[] = [];
+	private modelSpec = DEFAULT_MODEL_SPEC;
+	private isEnabled = true;
+	private blockedRules = new Set<string>();
+	private badgeText = "";
+	private requestBadgeRender: (() => void) | undefined;
+	private readonly pi: ExtensionAPI;
 
-	function setStatus(ctx: ExtensionContext, text: string): void {
-		badgeText = text;
-		if (requestBadgeRender) {
-			requestBadgeRender();
-		} else if (ctx.hasUI) {
-			ctx.ui.setStatus(STATUS_KEY, text);
+	constructor(pi: ExtensionAPI) {
+		this.pi = pi;
+	}
+
+	start(ctx: ExtensionContext): void {
+		this.rules = loadRules(ctx.cwd);
+		this.modelSpec = resolveModelSpec(ctx.cwd);
+		if (this.rules.length > 0) {
+			this.mountBadge(ctx);
+			this.showIdleStatus(ctx);
 		}
 	}
 
-	function mountBadge(ctx: ExtensionContext): void {
-		if (!ctx.hasUI || requestBadgeRender) {
-			return;
+	onInput(event: { source?: string }): void {
+		if (event.source !== "extension") {
+			this.blockedRules = new Set();
 		}
-		ctx.ui.setWidget(
-			STATUS_KEY,
-			(tui, theme) => {
-				requestBadgeRender = () => tui.requestRender();
-				return {
-					render(width: number) {
-						const hint = "/classifier to toggle";
-						const plain = `${badgeText}  ${hint}`;
-						const pad = " ".repeat(Math.max(0, width - plain.length));
-						const styled =
-							theme.fg(isEnabled ? "accent" : "dim", badgeText) +
-							theme.fg("dim", `  ${hint}`);
-						return [pad + styled];
-					},
-					invalidate() {},
-				};
-			},
-			{ placement: "belowEditor" },
+	}
+
+	hideDraft(message: DraftMessage): void {
+		if (
+			this.isEnabled &&
+			this.rules.length > 0 &&
+			message.role === "assistant"
+		) {
+			maskDraftText(message);
+		}
+	}
+
+	async onMessageEnd<M extends EndedMessage>(
+		event: { message: M },
+		ctx: ExtensionContext,
+	): Promise<{ message: M } | undefined> {
+		const reply = this.replyToCheck(event.message);
+		if (reply === undefined) {
+			return undefined;
+		}
+		const verdict = await this.classifyReply(ctx, reply);
+		if (!verdict) {
+			return undefined;
+		}
+		if (verdict.pass) {
+			this.blockedRules = new Set();
+			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
+			return undefined;
+		}
+		if (this.takeFreshViolations(verdict.violations).length === 0) {
+			this.giveUp(ctx, verdict.violations);
+			return undefined;
+		}
+		this.requestRewrite(ctx, reply, verdict.violations);
+		return { message: withheldPlaceholder(event.message) };
+	}
+
+	toggle(ctx: ExtensionContext): void {
+		this.isEnabled = !this.isEnabled;
+		this.showIdleStatus(ctx);
+		if (ctx.hasUI) {
+			ctx.ui.notify(
+				`Output classifier ${this.isEnabled ? "enabled" : "disabled"}`,
+				"info",
+			);
+		}
+	}
+
+	private replyToCheck(message: EndedMessage): string | undefined {
+		if (
+			!this.isEnabled ||
+			this.rules.length === 0 ||
+			!isFinalAssistantReply(message)
+		) {
+			return undefined;
+		}
+		const reply = textFromContent(message.content);
+		return reply.length < MIN_REPLY_LENGTH ? undefined : reply;
+	}
+
+	private takeFreshViolations(violations: Violation[]): Violation[] {
+		const fresh = violations.filter(
+			(violation) => !this.blockedRules.has(violation.rule),
 		);
+		for (const violation of fresh) {
+			this.blockedRules.add(violation.rule);
+		}
+		return fresh;
 	}
 
-	function requestRewrite(
+	private async classifyReply(
+		ctx: ExtensionContext,
+		reply: string,
+	): Promise<Verdict | undefined> {
+		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
+		try {
+			return await requestVerdict(
+				ctx,
+				this.modelSpec,
+				buildClassifierPrompt(this.rules, reply),
+			);
+		} catch (error) {
+			debugLog(`classifier error: ${String(error)}`);
+			this.setStatus(ctx, `${ENABLED_MARK} classifier ?`);
+			return undefined;
+		}
+	}
+
+	private requestRewrite(
 		ctx: ExtensionContext,
 		draft: string,
 		violations: Violation[],
 	): void {
-		setStatus(ctx, `${ENABLED_MARK} classifier \u270E rewriting`);
+		this.setStatus(ctx, `${ENABLED_MARK} classifier \u270E rewriting`);
 		try {
-			pi.sendMessage(
+			this.pi.sendMessage(
 				{
 					customType: FEEDBACK_MESSAGE_TYPE,
 					content: buildRewriteFeedback(draft, violations),
@@ -321,9 +395,9 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		}
 	}
 
-	function giveUp(ctx: ExtensionContext, violations: Violation[]): void {
-		blockedRules = new Set();
-		setStatus(ctx, `${ENABLED_MARK} classifier \u2717`);
+	private giveUp(ctx: ExtensionContext, violations: Violation[]): void {
+		this.blockedRules = new Set();
+		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2717`);
 		if (ctx.hasUI) {
 			ctx.ui.notify(
 				`Output still violates rules: ${violations.map(formatViolation).join("; ")}`,
@@ -332,121 +406,66 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		}
 	}
 
-	function isFinalAssistantReply(message: {
-		role?: string;
-		stopReason?: string;
-	}): boolean {
-		return message.role === "assistant" && message.stopReason === "stop";
-	}
-
-	async function classifyReply(
-		ctx: ExtensionContext,
-		reply: string,
-	): Promise<Verdict | undefined> {
-		setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
-		try {
-			return await requestVerdict(
-				ctx,
-				modelSpec,
-				buildClassifierPrompt(rules, reply),
-			);
-		} catch (error) {
-			debugLog(`classifier error: ${String(error)}`);
-			setStatus(ctx, `${ENABLED_MARK} classifier ?`);
-			return undefined;
+	private setStatus(ctx: ExtensionContext, text: string): void {
+		this.badgeText = text;
+		if (this.requestBadgeRender) {
+			this.requestBadgeRender();
+		} else if (ctx.hasUI) {
+			ctx.ui.setStatus(STATUS_KEY, text);
 		}
 	}
 
-	function showIdleStatus(ctx: ExtensionContext): void {
-		setStatus(
+	private showIdleStatus(ctx: ExtensionContext): void {
+		this.setStatus(
 			ctx,
-			isEnabled
-				? `${ENABLED_MARK} classifier (${rules.length})`
+			this.isEnabled
+				? `${ENABLED_MARK} classifier (${this.rules.length})`
 				: `${DISABLED_MARK} classifier off`,
 		);
 	}
 
-	function toggle(ctx: ExtensionContext): void {
-		isEnabled = !isEnabled;
-		showIdleStatus(ctx);
-		if (ctx.hasUI) {
-			ctx.ui.notify(
-				`Output classifier ${isEnabled ? "enabled" : "disabled"}`,
-				"info",
-			);
-		}
+	private badgeLine(theme: Theme, width: number): string {
+		const plain = `${this.badgeText}  ${BADGE_HINT}`;
+		const pad = " ".repeat(Math.max(0, width - plain.length));
+		const styled =
+			theme.fg(this.isEnabled ? "accent" : "dim", this.badgeText) +
+			theme.fg("dim", `  ${BADGE_HINT}`);
+		return pad + styled;
 	}
 
-	pi.on("session_start", async (_event, ctx) => {
-		rules = loadRules(ctx.cwd);
-		modelSpec = resolveModelSpec(ctx.cwd);
-		if (rules.length > 0) {
-			mountBadge(ctx);
-			showIdleStatus(ctx);
-		}
-	});
-
-	pi.on("input", async (event) => {
-		if (event.source !== "extension") {
-			blockedRules = new Set();
-		}
-	});
-
-	const hideStreamingDraft = async (event: {
-		message: { role?: string; content?: unknown };
-	}) => {
-		if (isEnabled && rules.length > 0 && event.message.role === "assistant") {
-			maskDraftText(event.message);
-		}
-	};
-	pi.on("message_start", hideStreamingDraft);
-	pi.on("message_update", hideStreamingDraft);
-
-	pi.on("message_end", async (event, ctx) => {
-		if (
-			!isEnabled ||
-			rules.length === 0 ||
-			!isFinalAssistantReply(event.message)
-		) {
+	private mountBadge(ctx: ExtensionContext): void {
+		if (!ctx.hasUI || this.requestBadgeRender) {
 			return;
 		}
-
-		const reply = textFromContent(event.message.content);
-		if (reply.length < MIN_REPLY_LENGTH) {
-			return;
-		}
-
-		const verdict = await classifyReply(ctx, reply);
-		if (!verdict) {
-			return;
-		}
-
-		if (verdict.pass) {
-			blockedRules = new Set();
-			setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
-			return;
-		}
-
-		const freshViolations = verdict.violations.filter(
-			(violation) => !blockedRules.has(violation.rule),
+		ctx.ui.setWidget(
+			STATUS_KEY,
+			(tui, theme) => {
+				this.requestBadgeRender = () => tui.requestRender();
+				return {
+					render: (width: number) => [this.badgeLine(theme, width)],
+					invalidate() {},
+				};
+			},
+			{ placement: "belowEditor" },
 		);
-		if (freshViolations.length === 0) {
-			giveUp(ctx, verdict.violations);
-			return;
-		}
-		for (const violation of freshViolations) {
-			blockedRules.add(violation.rule);
-		}
+	}
+}
 
-		requestRewrite(ctx, reply, verdict.violations);
-		return {
-			message: withheldPlaceholder(event.message) as typeof event.message,
-		};
-	});
+export default function outputClassifier(pi: ExtensionAPI) {
+	const classifier = new Classifier(pi);
+	const hideDraft = async (event: { message: DraftMessage }) =>
+		classifier.hideDraft(event.message);
 
+	pi.on("session_start", async (_event, ctx) => classifier.start(ctx));
+	pi.on("input", async (event) => classifier.onInput(event));
+	pi.on("message_start", hideDraft);
+	pi.on("message_update", hideDraft);
+	pi.on("message_end", async (event, ctx) =>
+		classifier.onMessageEnd(event, ctx),
+	);
 	pi.registerCommand("classifier", {
 		description:
 			"Toggle the output classifier (rules in rules/ and .pi/output-rules/) on or off",
-		handler: async (_args, ctx) => toggle(ctx),
+		handler: async (_args, ctx) => classifier.toggle(ctx),
 	});
 }

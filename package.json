@@ -11,6 +11,7 @@
     "tldr"
   ],
   "license": "MIT",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcoskichel/pi-output-classifier.git"
@@ -21,9 +22,20 @@
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "check": "tsc && biome check && node no-comments.ts index.ts",
+    "test": "node --test",
+    "fix": "biome check --write"
+  },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
+    "@earendil-works/pi-ai": "^0.83.0",
+    "@earendil-works/pi-coding-agent": "^0.83.0",
+    "typescript": "^5.9.0"
   },
   "pi": {
     "extensions": [
