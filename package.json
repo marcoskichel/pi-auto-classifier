@@ -23,13 +23,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "tsc"
+    "check": "tsc && biome check",
+    "fix": "biome check --write"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
     "@earendil-works/pi-ai": "^0.83.0",
     "@earendil-works/pi-coding-agent": "^0.83.0",
     "typescript": "^5.9.0"
