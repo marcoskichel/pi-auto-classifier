@@ -1,21 +1,27 @@
 # pi-output-classifier
 
-A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against a set of output rules. When a reply violates the rules, the extension withholds it and asks the model to rewrite it (up to 2 attempts).
+A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against a set of output rules. It hides the draft while the model streams it, withholds replies that violate the rules, and asks the model to rewrite them.
 
 Ships with one rule: [ASD-STE100 Simplified Technical English + TLDR](rules/ste-tldr.md) — active voice, short sentences, answer first, no filler.
 
 ## How it works
 
-1. On `message_end`, the final assistant reply is sent to a small classifier model (default: `anthropic/claude-haiku-4-5`).
-2. The classifier judges the reply against all loaded rules and returns pass/fail with violations.
-3. On fail, the draft is replaced with a placeholder and a hidden follow-up message asks the model to rewrite it.
-4. After 2 failed rewrites it gives up and shows a warning.
+1. While the model streams, the extension masks the reply text so drafts never render in the terminal. Thinking blocks and tool calls stream as usual.
+2. On `message_end`, the extension sends the final reply to a small classifier model (default: `anthropic/claude-haiku-4-5`).
+3. The classifier judges the reply against all loaded rules and returns pass/fail with per-rule violations.
+4. On pass, the full reply renders at once.
+5. On fail, a placeholder replaces the draft and a hidden follow-up message asks the model to rewrite it.
+6. Each rule can force a rewrite only once per user turn. When every violated rule has spent its block, the reply passes through with a warning.
 
 Classifier errors, missing models, or missing API keys fail open — the reply passes through untouched.
 
 ## Install
 
-Add the extension to your pi config (e.g. `~/.pi/agent/config.json`):
+```bash
+pi install npm:pi-output-classifier
+```
+
+Or from a local checkout, add it to `~/.pi/agent/settings.json`:
 
 ```json
 {
@@ -25,9 +31,9 @@ Add the extension to your pi config (e.g. `~/.pi/agent/config.json`):
 
 ## Usage
 
-- `/tldr` — toggle the classifier on/off
-- `ctrl+alt+t` — same toggle as a shortcut
-- Status bar shows the current state: `● tldr: 1 rule(s)`, `checking...`, `pass`, `fail, rewriting (1/2)`, or `○ tldr: off`
+- `/classifier` — toggle the classifier on/off
+- `ctrl+alt+b` — same toggle as a shortcut
+- A badge below the editor shows the current state: `● classifier (1)` idle with rule count, `…` checking, `✓` pass, `✎ rewriting`, `✗` gave up, `○ classifier off`
 
 ## Rules
 
