@@ -257,7 +257,6 @@ function withheldPlaceholder(message: { content: unknown }): object {
 
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
-const TOGGLE_SHORTCUT = "ctrl+alt+b";
 
 export default function outputClassifier(pi: ExtensionAPI) {
 	let rules: Rule[] = [];
@@ -287,7 +286,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 				requestBadgeRender = () => tui.requestRender();
 				return {
 					render(width: number) {
-						const hint = `${TOGGLE_SHORTCUT} to toggle`;
+						const hint = "/classifier to toggle";
 						const plain = `${badgeText}  ${hint}`;
 						const pad = " ".repeat(Math.max(0, width - plain.length));
 						const styled =
@@ -449,10 +448,5 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		description:
 			"Toggle the output classifier (rules in rules/ and .pi/output-rules/) on or off",
 		handler: async (_args, ctx) => toggle(ctx),
-	});
-
-	pi.registerShortcut(TOGGLE_SHORTCUT, {
-		description: "Toggle the output classifier",
-		handler: async (ctx) => toggle(ctx),
 	});
 }

@@ -20,7 +20,7 @@ Or add a local checkout to `~/.pi/agent/settings.json`:
 
 ## Usage
 
-- `/classifier` or `ctrl+alt+b` — toggle on/off
+- `/classifier` — toggle on/off
 - A badge below the editor shows the current state
 
 ## Rules
