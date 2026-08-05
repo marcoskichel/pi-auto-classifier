@@ -1,20 +1,33 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import { complete } from "@earendil-works/pi-ai/compat";
-import { CONFIG_DIR_NAME, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+	CONFIG_DIR_NAME,
+	type ExtensionAPI,
+	type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_MODEL_SPEC = "anthropic/claude-haiku-4-5";
 const CONFIG_FILE_NAME = "output-classifier.json";
-const GLOBAL_CONFIG_PATH = path.join(os.homedir(), CONFIG_DIR_NAME, "agent", CONFIG_FILE_NAME);
+const GLOBAL_CONFIG_PATH = path.join(
+	os.homedir(),
+	CONFIG_DIR_NAME,
+	"agent",
+	CONFIG_FILE_NAME,
+);
 const DEBUG_LOG_PATH = process.env.PI_OUTPUT_CLASSIFIER_DEBUG;
 const MAX_REWRITE_ATTEMPTS = 2;
 const MIN_REPLY_LENGTH = 40;
 const STATUS_KEY = "output-classifier";
 const FEEDBACK_MESSAGE_TYPE = "output-classifier";
 const PROJECT_RULES_DIR = path.join(".pi", "output-rules");
-const GLOBAL_RULES_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), "rules");
+const GLOBAL_RULES_DIR = path.join(
+	path.dirname(fileURLToPath(import.meta.url)),
+	"rules",
+);
 
 type Rule = { name: string; text: string };
 type Verdict = { pass: boolean; violations: string[] };
@@ -61,7 +74,10 @@ function readRulesFromDir(dir: string): Rule[] {
 }
 
 function loadRules(cwd: string): Rule[] {
-	return [...readRulesFromDir(GLOBAL_RULES_DIR), ...readRulesFromDir(path.join(cwd, PROJECT_RULES_DIR))];
+	return [
+		...readRulesFromDir(GLOBAL_RULES_DIR),
+		...readRulesFromDir(path.join(cwd, PROJECT_RULES_DIR)),
+	];
 }
 
 function isTextBlock(block: unknown): block is TextBlock {
@@ -88,7 +104,9 @@ function textFromContent(content: unknown): string {
 }
 
 function buildClassifierPrompt(rules: Rule[], reply: string): string {
-	const rulesText = rules.map((rule) => `### ${rule.name}\n${rule.text}`).join("\n\n");
+	const rulesText = rules
+		.map((rule) => `### ${rule.name}\n${rule.text}`)
+		.join("\n\n");
 	return [
 		"You are a strict compliance checker for an AI coding assistant's final reply.",
 		"Judge the reply text alone against the rules below.",
@@ -115,7 +133,10 @@ function parseVerdict(raw: string): Verdict {
 		return { pass: true, violations: [] };
 	}
 	try {
-		const parsed = JSON.parse(jsonCandidate) as { pass?: boolean; violations?: string[] };
+		const parsed = JSON.parse(jsonCandidate) as {
+			pass?: boolean;
+			violations?: string[];
+		};
 		return {
 			pass: parsed.pass !== false,
 			violations: Array.isArray(parsed.violations) ? parsed.violations : [],
@@ -140,7 +161,9 @@ async function requestVerdict(
 
 	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 	if (!auth.ok || !auth.apiKey) {
-		debugLog(`no auth for ${modelSpec}: ${auth.ok ? "missing key" : auth.error}`);
+		debugLog(
+			`no auth for ${modelSpec}: ${auth.ok ? "missing key" : auth.error}`,
+		);
 		return { pass: true, violations: [] };
 	}
 
@@ -148,17 +171,34 @@ async function requestVerdict(
 		model,
 		{
 			messages: [
-				{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() },
+				{
+					role: "user",
+					content: [{ type: "text", text: prompt }],
+					timestamp: Date.now(),
+				},
 			],
 		},
-		{ apiKey: auth.apiKey, headers: auth.headers, env: auth.env, sessionId: uuidv7() },
+		{
+			apiKey: auth.apiKey,
+			headers: auth.headers,
+			env: auth.env,
+			sessionId: uuidv7(),
+		},
 	);
 
 	if (response.stopReason === "error") {
-		throw new Error((response as { errorMessage?: string }).errorMessage ?? "classifier request failed");
+		throw new Error(
+			(response as { errorMessage?: string }).errorMessage ??
+				"classifier request failed",
+		);
 	}
 
-	const verdict = parseVerdict(response.content.filter(isTextBlock).map((block) => block.text).join("\n"));
+	const verdict = parseVerdict(
+		response.content
+			.filter(isTextBlock)
+			.map((block) => block.text)
+			.join("\n"),
+	);
 	debugLog(`verdict: ${JSON.stringify(verdict)}`);
 	return verdict;
 }
@@ -177,10 +217,28 @@ function buildRewriteFeedback(draft: string, violations: string[]): string {
 	].join("\n");
 }
 
+// ponytail: relies on pi emitting extension events before TUI listeners with a shared
+// message reference, and on message_update carrying a per-event shallow copy of the
+// partial message (agent-loop.js). If pi ever clones events for extensions, drafts
+// become visible again during streaming and this needs a real upstream hide API.
+function maskDraftText(message: { role?: string; content?: unknown }): void {
+	if (!Array.isArray(message.content)) {
+		return;
+	}
+	message.content = message.content.map((block) =>
+		isTextBlock(block) ? { ...block, text: "" } : block,
+	);
+}
+
 function withheldPlaceholder(message: { content: unknown }): object {
 	return {
 		...message,
-		content: [{ type: "text", text: "(draft withheld by output classifier, rewriting)" }],
+		content: [
+			{
+				type: "text",
+				text: "(draft withheld by output classifier, rewriting)",
+			},
+		],
 	};
 }
 
@@ -218,7 +276,9 @@ export default function outputClassifier(pi: ExtensionAPI) {
 						const hint = `${TOGGLE_SHORTCUT} to toggle`;
 						const plain = `${badgeText}  ${hint}`;
 						const pad = " ".repeat(Math.max(0, width - plain.length));
-						const styled = theme.fg(isEnabled ? "accent" : "dim", badgeText) + theme.fg("dim", `  ${hint}`);
+						const styled =
+							theme.fg(isEnabled ? "accent" : "dim", badgeText) +
+							theme.fg("dim", `  ${hint}`);
 						return [pad + styled];
 					},
 					invalidate() {},
@@ -228,9 +288,16 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		);
 	}
 
-	function requestRewrite(ctx: ExtensionContext, draft: string, violations: string[]): void {
+	function requestRewrite(
+		ctx: ExtensionContext,
+		draft: string,
+		violations: string[],
+	): void {
 		rewriteAttempts++;
-		setStatus(ctx, `${ENABLED_MARK} classifier \u270E ${rewriteAttempts}/${MAX_REWRITE_ATTEMPTS}`);
+		setStatus(
+			ctx,
+			`${ENABLED_MARK} classifier \u270E ${rewriteAttempts}/${MAX_REWRITE_ATTEMPTS}`,
+		);
 		try {
 			pi.sendMessage(
 				{
@@ -249,7 +316,10 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		rewriteAttempts = 0;
 		setStatus(ctx, `${ENABLED_MARK} classifier \u2717`);
 		if (ctx.hasUI) {
-			ctx.ui.notify(`Output still violates rules: ${violations.join("; ")}`, "warning");
+			ctx.ui.notify(
+				`Output still violates rules: ${violations.join("; ")}`,
+				"warning",
+			);
 		}
 	}
 
@@ -260,10 +330,17 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		return message.role === "assistant" && message.stopReason === "stop";
 	}
 
-	async function classifyReply(ctx: ExtensionContext, reply: string): Promise<Verdict | undefined> {
+	async function classifyReply(
+		ctx: ExtensionContext,
+		reply: string,
+	): Promise<Verdict | undefined> {
 		setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
 		try {
-			return await requestVerdict(ctx, modelSpec, buildClassifierPrompt(rules, reply));
+			return await requestVerdict(
+				ctx,
+				modelSpec,
+				buildClassifierPrompt(rules, reply),
+			);
 		} catch (error) {
 			debugLog(`classifier error: ${String(error)}`);
 			setStatus(ctx, `${ENABLED_MARK} classifier ?`);
@@ -272,14 +349,22 @@ export default function outputClassifier(pi: ExtensionAPI) {
 	}
 
 	function showIdleStatus(ctx: ExtensionContext): void {
-		setStatus(ctx, isEnabled ? `${ENABLED_MARK} classifier (${rules.length})` : `${DISABLED_MARK} classifier off`);
+		setStatus(
+			ctx,
+			isEnabled
+				? `${ENABLED_MARK} classifier (${rules.length})`
+				: `${DISABLED_MARK} classifier off`,
+		);
 	}
 
 	function toggle(ctx: ExtensionContext): void {
 		isEnabled = !isEnabled;
 		showIdleStatus(ctx);
 		if (ctx.hasUI) {
-			ctx.ui.notify(`Output classifier ${isEnabled ? "enabled" : "disabled"}`, "info");
+			ctx.ui.notify(
+				`Output classifier ${isEnabled ? "enabled" : "disabled"}`,
+				"info",
+			);
 		}
 	}
 
@@ -298,8 +383,22 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		}
 	});
 
+	const hideStreamingDraft = async (event: {
+		message: { role?: string; content?: unknown };
+	}) => {
+		if (isEnabled && rules.length > 0 && event.message.role === "assistant") {
+			maskDraftText(event.message);
+		}
+	};
+	pi.on("message_start", hideStreamingDraft);
+	pi.on("message_update", hideStreamingDraft);
+
 	pi.on("message_end", async (event, ctx) => {
-		if (!isEnabled || rules.length === 0 || !isFinalAssistantReply(event.message)) {
+		if (
+			!isEnabled ||
+			rules.length === 0 ||
+			!isFinalAssistantReply(event.message)
+		) {
 			return;
 		}
 
@@ -325,11 +424,14 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		}
 
 		requestRewrite(ctx, reply, verdict.violations);
-		return { message: withheldPlaceholder(event.message) as typeof event.message };
+		return {
+			message: withheldPlaceholder(event.message) as typeof event.message,
+		};
 	});
 
 	pi.registerCommand("classifier", {
-		description: "Toggle the output classifier (rules in rules/ and .pi/output-rules/) on or off",
+		description:
+			"Toggle the output classifier (rules in rules/ and .pi/output-rules/) on or off",
 		handler: async (_args, ctx) => toggle(ctx),
 	});
 
