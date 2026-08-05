@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "tsc && biome check && eslint .",
+    "check": "tsc && biome check && node no-comments.ts index.ts",
     "test": "node --test",
     "fix": "biome check --write"
   },
@@ -35,10 +35,6 @@
     "@biomejs/biome": "^2.4.10",
     "@earendil-works/pi-ai": "^0.83.0",
     "@earendil-works/pi-coding-agent": "^0.83.0",
-    "@typescript-eslint/parser": "^8.66.0",
-    "eslint": "^10.8.0",
-    "eslint-plugin-human-first": "^0.4.0",
-    "eslint-plugin-perfectionist": "^5.10.1",
     "typescript": "^5.9.0"
   },
   "pi": {

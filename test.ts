@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import test from "node:test";
 
 import outputClassifier from "./index.ts";
+
+function runNoComments(source: string): { code: number; output: string } {
+	const file = path.join(
+		fs.mkdtempSync(path.join(os.tmpdir(), "no-comments-")),
+		"probe.ts",
+	);
+	fs.writeFileSync(file, source);
+	try {
+		execFileSync("node", ["no-comments.ts", file], { encoding: "utf8" });
+		return { code: 0, output: "" };
+	} catch (error) {
+		const failure = error as { status: number; stderr: string };
+		return { code: failure.status, output: failure.stderr };
+	}
+}
 
 type Handler = (event: any, ctx: any) => Promise<any>;
 
@@ -50,6 +69,26 @@ function setup() {
 		badge: () => widget?.render(60).join("") ?? "",
 	};
 }
+
+test("no-comments flags a plain comment", () => {
+	const result = runNoComments("// explain\nconst x = 1;\n");
+	assert.equal(result.code, 1);
+	assert.match(result.output, /unexpected comment/);
+});
+
+test("no-comments allows the ponytail prefix", () => {
+	assert.equal(runNoComments("/* ponytail: known ceiling */\n").code, 0);
+});
+
+test("no-comments ignores comment lookalikes in literals", () => {
+	const source = [
+		'const url = "https://example.com";',
+		"const re = /\\/\\/ nope/;",
+		"const tpl = `// nope`;",
+		"",
+	].join("\n");
+	assert.equal(runNoComments(source).code, 0);
+});
 
 test("session_start mounts a badge that renders classifier state", async () => {
 	const app = setup();
