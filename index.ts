@@ -184,24 +184,49 @@ function withheldPlaceholder(message: { content: unknown }): object {
 	};
 }
 
-function setStatus(ctx: ExtensionContext, text: string): void {
-	if (ctx.hasUI) {
-		ctx.ui.setStatus(STATUS_KEY, text);
-	}
-}
-
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
+const BADGE_WIDTH = 22;
 
 export default function outputClassifier(pi: ExtensionAPI) {
 	let rules: Rule[] = [];
 	let modelSpec = DEFAULT_MODEL_SPEC;
 	let isEnabled = true;
 	let rewriteAttempts = 0;
+	let badgeText = "";
+	let requestBadgeRender: (() => void) | undefined;
+
+	function setStatus(ctx: ExtensionContext, text: string): void {
+		badgeText = text;
+		if (requestBadgeRender) {
+			requestBadgeRender();
+		} else if (ctx.hasUI) {
+			ctx.ui.setStatus(STATUS_KEY, text);
+		}
+	}
+
+	function mountBadge(ctx: ExtensionContext): void {
+		if (!ctx.hasUI || requestBadgeRender) {
+			return;
+		}
+		void ctx.ui.custom(
+			(tui, theme) => {
+				requestBadgeRender = () => tui.requestRender();
+				return {
+					render(width: number) {
+						const pad = " ".repeat(Math.max(0, width - badgeText.length));
+						return [pad + theme.fg(isEnabled ? "accent" : "dim", badgeText)];
+					},
+					invalidate() {},
+				};
+			},
+			{ overlay: true, overlayOptions: { anchor: "top-right", width: BADGE_WIDTH } },
+		);
+	}
 
 	function requestRewrite(ctx: ExtensionContext, draft: string, violations: string[]): void {
 		rewriteAttempts++;
-		setStatus(ctx, `${ENABLED_MARK} tldr: fail, rewriting (${rewriteAttempts}/${MAX_REWRITE_ATTEMPTS})`);
+		setStatus(ctx, `${ENABLED_MARK} classifier \u270E ${rewriteAttempts}/${MAX_REWRITE_ATTEMPTS}`);
 		try {
 			pi.sendMessage(
 				{
@@ -218,7 +243,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 
 	function giveUp(ctx: ExtensionContext, violations: string[]): void {
 		rewriteAttempts = 0;
-		setStatus(ctx, `${ENABLED_MARK} tldr: fail (gave up)`);
+		setStatus(ctx, `${ENABLED_MARK} classifier \u2717`);
 		if (ctx.hasUI) {
 			ctx.ui.notify(`Output still violates rules: ${violations.join("; ")}`, "warning");
 		}
@@ -232,21 +257,18 @@ export default function outputClassifier(pi: ExtensionAPI) {
 	}
 
 	async function classifyReply(ctx: ExtensionContext, reply: string): Promise<Verdict | undefined> {
-		setStatus(ctx, `${ENABLED_MARK} tldr: checking...`);
+		setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
 		try {
 			return await requestVerdict(ctx, modelSpec, buildClassifierPrompt(rules, reply));
 		} catch (error) {
 			debugLog(`classifier error: ${String(error)}`);
-			setStatus(ctx, `${ENABLED_MARK} tldr: check failed (skipped)`);
+			setStatus(ctx, `${ENABLED_MARK} classifier ?`);
 			return undefined;
 		}
 	}
 
 	function showIdleStatus(ctx: ExtensionContext): void {
-		setStatus(
-			ctx,
-			isEnabled ? `${ENABLED_MARK} tldr: ${rules.length} rule(s)` : `${DISABLED_MARK} tldr: off`,
-		);
+		setStatus(ctx, isEnabled ? `${ENABLED_MARK} classifier (${rules.length})` : `${DISABLED_MARK} classifier off`);
 	}
 
 	function toggle(ctx: ExtensionContext): void {
@@ -261,6 +283,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		rules = loadRules(ctx.cwd);
 		modelSpec = resolveModelSpec(ctx.cwd);
 		if (rules.length > 0) {
+			mountBadge(ctx);
 			showIdleStatus(ctx);
 		}
 	});
@@ -288,7 +311,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 
 		if (verdict.pass) {
 			rewriteAttempts = 0;
-			setStatus(ctx, `${ENABLED_MARK} tldr: pass`);
+			setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
 			return;
 		}
 
@@ -301,8 +324,8 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		return { message: withheldPlaceholder(event.message) as typeof event.message };
 	});
 
-	pi.registerCommand("tldr", {
-		description: "Toggle the output classifier (STE/TLDR rules) on or off",
+	pi.registerCommand("classifier", {
+		description: "Toggle the output classifier (rules in rules/ and .pi/output-rules/) on or off",
 		handler: async (_args, ctx) => toggle(ctx),
 	});
 
