@@ -19,7 +19,6 @@ const GLOBAL_CONFIG_PATH = path.join(
 	CONFIG_FILE_NAME,
 );
 const DEBUG_LOG_PATH = process.env.PI_OUTPUT_CLASSIFIER_DEBUG;
-const MAX_REWRITE_ATTEMPTS = 2;
 const MIN_REPLY_LENGTH = 40;
 const STATUS_KEY = "output-classifier";
 const FEEDBACK_MESSAGE_TYPE = "output-classifier";
@@ -30,7 +29,8 @@ const GLOBAL_RULES_DIR = path.join(
 );
 
 type Rule = { name: string; text: string };
-type Verdict = { pass: boolean; violations: string[] };
+type Violation = { rule: string; reason: string };
+type Verdict = { pass: boolean; violations: Violation[] };
 type ClassifierConfig = { model?: string };
 
 type TextBlock = { type: "text"; text: string };
@@ -122,7 +122,7 @@ function buildClassifierPrompt(rules: Rule[], reply: string): string {
 		reply,
 		"</reply>",
 		"",
-		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": ["short reason", ...]}',
+		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<rule heading>", "reason": "short reason"}, ...]}',
 	].join("\n");
 }
 
@@ -135,12 +135,21 @@ function parseVerdict(raw: string): Verdict {
 	try {
 		const parsed = JSON.parse(jsonCandidate) as {
 			pass?: boolean;
-			violations?: string[];
+			violations?: unknown[];
 		};
-		return {
-			pass: parsed.pass !== false,
-			violations: Array.isArray(parsed.violations) ? parsed.violations : [],
-		};
+		const violations = (
+			Array.isArray(parsed.violations) ? parsed.violations : []
+		).map((entry): Violation => {
+			if (typeof entry === "string") {
+				return { rule: "unspecified", reason: entry };
+			}
+			const obj = entry as { rule?: unknown; reason?: unknown };
+			return {
+				rule: typeof obj.rule === "string" ? obj.rule : "unspecified",
+				reason: typeof obj.reason === "string" ? obj.reason : "rule violated",
+			};
+		});
+		return { pass: parsed.pass !== false, violations };
 	} catch {
 		debugLog(`invalid verdict JSON: ${jsonCandidate}`);
 		return { pass: true, violations: [] };
@@ -203,10 +212,14 @@ async function requestVerdict(
 	return verdict;
 }
 
-function buildRewriteFeedback(draft: string, violations: string[]): string {
+function formatViolation(violation: Violation): string {
+	return `[${violation.rule}] ${violation.reason}`;
+}
+
+function buildRewriteFeedback(draft: string, violations: Violation[]): string {
 	return [
 		"Your draft reply below was withheld from the user because it violates the output rules:",
-		...violations.map((violation) => `- ${violation}`),
+		...violations.map((violation) => `- ${formatViolation(violation)}`),
 		"",
 		"<draft>",
 		draft,
@@ -250,7 +263,8 @@ export default function outputClassifier(pi: ExtensionAPI) {
 	let rules: Rule[] = [];
 	let modelSpec = DEFAULT_MODEL_SPEC;
 	let isEnabled = true;
-	let rewriteAttempts = 0;
+	// Each rule may force a rewrite only once per user turn.
+	let blockedRules = new Set<string>();
 	let badgeText = "";
 	let requestBadgeRender: (() => void) | undefined;
 
@@ -291,13 +305,9 @@ export default function outputClassifier(pi: ExtensionAPI) {
 	function requestRewrite(
 		ctx: ExtensionContext,
 		draft: string,
-		violations: string[],
+		violations: Violation[],
 	): void {
-		rewriteAttempts++;
-		setStatus(
-			ctx,
-			`${ENABLED_MARK} classifier \u270E ${rewriteAttempts}/${MAX_REWRITE_ATTEMPTS}`,
-		);
+		setStatus(ctx, `${ENABLED_MARK} classifier \u270E rewriting`);
 		try {
 			pi.sendMessage(
 				{
@@ -312,12 +322,12 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		}
 	}
 
-	function giveUp(ctx: ExtensionContext, violations: string[]): void {
-		rewriteAttempts = 0;
+	function giveUp(ctx: ExtensionContext, violations: Violation[]): void {
+		blockedRules = new Set();
 		setStatus(ctx, `${ENABLED_MARK} classifier \u2717`);
 		if (ctx.hasUI) {
 			ctx.ui.notify(
-				`Output still violates rules: ${violations.join("; ")}`,
+				`Output still violates rules: ${violations.map(formatViolation).join("; ")}`,
 				"warning",
 			);
 		}
@@ -379,7 +389,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 
 	pi.on("input", async (event) => {
 		if (event.source !== "extension") {
-			rewriteAttempts = 0;
+			blockedRules = new Set();
 		}
 	});
 
@@ -413,14 +423,20 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		}
 
 		if (verdict.pass) {
-			rewriteAttempts = 0;
+			blockedRules = new Set();
 			setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
 			return;
 		}
 
-		if (rewriteAttempts >= MAX_REWRITE_ATTEMPTS) {
+		const freshViolations = verdict.violations.filter(
+			(violation) => !blockedRules.has(violation.rule),
+		);
+		if (freshViolations.length === 0) {
 			giveUp(ctx, verdict.violations);
 			return;
+		}
+		for (const violation of freshViolations) {
+			blockedRules.add(violation.rule);
 		}
 
 		requestRewrite(ctx, reply, verdict.violations);
