@@ -244,7 +244,7 @@ function withheldPlaceholder(message: { content: unknown }): object {
 
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
-const TOGGLE_SHORTCUT = "ctrl+b";
+const TOGGLE_SHORTCUT = "ctrl+alt+b";
 
 export default function outputClassifier(pi: ExtensionAPI) {
 	let rules: Rule[] = [];
