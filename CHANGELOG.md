@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/marcoskichel/pi-output-classifier/compare/pi-output-classifier-v0.2.0...pi-output-classifier-v0.3.0) (2026-08-06)
+
+
+### Features
+
+* remove toggle shortcut in favor of /classifier command ([#10](https://github.com/marcoskichel/pi-output-classifier/issues/10)) ([a8813e7](https://github.com/marcoskichel/pi-output-classifier/commit/a8813e77502b80e4162d014bc2b8231f65219625))
+* retry rewrites until the reply passes ([#13](https://github.com/marcoskichel/pi-output-classifier/issues/13)) ([67e6a28](https://github.com/marcoskichel/pi-output-classifier/commit/67e6a280cf6c21c69a5034a82f04fd4c9e2d6eba))
+
 ## [0.2.0](https://github.com/marcoskichel/pi-output-classifier/compare/pi-output-classifier-v0.1.0...pi-output-classifier-v0.2.0) (2026-08-05)
 
 
