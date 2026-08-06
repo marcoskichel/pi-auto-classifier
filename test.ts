@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import outputClassifier from "./index.ts";
 
@@ -22,7 +23,8 @@ function runNoComments(source: string): { code: number; output: string } {
 	}
 }
 
-type Handler = (event: any, ctx: any) => Promise<any>;
+type Handler = (event: never, ctx: never) => Promise<unknown>;
+type Call = (event: unknown, ctx: unknown) => Promise<unknown>;
 
 function setup() {
 	const handlers: Record<string, Handler> = {};
@@ -38,20 +40,17 @@ function setup() {
 		sendMessage: (message: unknown) => sent.push(message),
 	};
 
-	let widget: { render: (width: number) => string[] } | undefined;
+	let status = "";
 	const notices: string[] = [];
 	const ctx = {
 		cwd: process.cwd(),
 		hasUI: true,
 		ui: {
-			setStatus: () => {},
-			notify: (text: string) => notices.push(text),
-			setWidget: (_key: string, factory: (tui: any, theme: any) => any) => {
-				widget = factory(
-					{ requestRender: () => {} },
-					{ fg: (_color: string, text: string) => text },
-				);
+			setStatus: (_key: string, text: string) => {
+				status = text;
 			},
+			notify: (text: string) => notices.push(text),
+			setWidget: () => {},
 		},
 		modelRegistry: {
 			find: () => undefined,
@@ -59,14 +58,14 @@ function setup() {
 		},
 	};
 
-	outputClassifier(pi as any);
+	outputClassifier(pi as unknown as ExtensionAPI);
 	return {
-		handlers,
-		commands,
+		handlers: handlers as Record<string, Call>,
+		commands: commands as Record<string, { handler: Call }>,
 		sent,
 		ctx,
 		notices,
-		badge: () => widget?.render(60).join("") ?? "",
+		badge: () => status,
 	};
 }
 
@@ -90,7 +89,7 @@ test("no-comments ignores comment lookalikes in literals", () => {
 	assert.equal(runNoComments(source).code, 0);
 });
 
-test("session_start mounts a badge that renders classifier state", async () => {
+test("session_start shows classifier state in the status bar", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
 	assert.match(app.badge(), /classifier \(\d+\)/);
