@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/marcoskichel/pi-output-classifier/compare/pi-output-classifier-v0.3.0...pi-output-classifier-v0.4.0) (2026-08-06)
+
+
+### Features
+
+* move classifier badge into the status bar ([#15](https://github.com/marcoskichel/pi-output-classifier/issues/15)) ([6cfc6bb](https://github.com/marcoskichel/pi-output-classifier/commit/6cfc6bbd3a238dc8d23a39a291c310eaf1ea9701))
+
 ## [0.3.0](https://github.com/marcoskichel/pi-output-classifier/compare/pi-output-classifier-v0.2.0...pi-output-classifier-v0.3.0) (2026-08-06)
 
 
