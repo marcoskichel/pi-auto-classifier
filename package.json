@@ -1,6 +1,6 @@
 {
   "name": "pi-auto-classifier",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "description": "Pi extension that classifies every final assistant reply against markdown output rules and asks the model to rewrite violations. Ships with an ASD-STE100 Simplified Technical English + TLDR rule.",
   "keywords": [
     "pi-package",
@@ -26,10 +26,9 @@
   ],
   "scripts": {
     "check": "tsc && biome check && node no-comments.ts index.ts",
-    "dev": "sh dev.sh",
+    "dev": "node dev.ts",
     "test": "node --test",
-    "fix": "biome check --write",
-    "dev": "node dev.ts"
+    "fix": "biome check --write"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
