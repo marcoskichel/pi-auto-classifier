@@ -146,3 +146,24 @@ test("message_end passes the reply through when no model is configured", async (
 	assert.deepEqual(app.sent, []);
 	assert.match(app.badge(), /classifier/);
 });
+
+test("tool_call fails open and counts project tool rules", async () => {
+	const app = setup();
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "tool-rules-"));
+	fs.mkdirSync(path.join(cwd, ".pi", "tool-rules"), { recursive: true });
+	fs.writeFileSync(
+		path.join(cwd, ".pi", "tool-rules", "no-branch.md"),
+		"Block git switch. Tell the assistant to use a worktree.",
+	);
+	const bare = setup();
+	await bare.handlers.session_start({}, { ...bare.ctx, cwd: os.tmpdir() });
+	const baseline = Number(bare.badge().match(/classifier \((\d+)\)/)?.[1]);
+	const ctx = { ...app.ctx, cwd };
+	await app.handlers.session_start({}, ctx);
+	assert.match(app.badge(), new RegExp(`classifier \\(${baseline + 1}\\)`));
+	const blocked = await app.handlers.tool_call(
+		{ toolName: "bash", input: { command: "git switch -c feat" } },
+		ctx,
+	);
+	assert.equal(blocked, undefined);
+});

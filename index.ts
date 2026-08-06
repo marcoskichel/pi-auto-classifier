@@ -23,10 +23,13 @@ const MIN_REPLY_LENGTH = 40;
 const STATUS_KEY = "output-classifier";
 const FEEDBACK_MESSAGE_TYPE = "output-classifier";
 const PROJECT_RULES_DIR = path.join(".pi", "output-rules");
+const PROJECT_TOOL_RULES_DIR = path.join(".pi", "tool-rules");
+const USER_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
 const GLOBAL_RULES_DIR = path.join(
 	path.dirname(fileURLToPath(import.meta.url)),
 	"rules",
 );
+const MAX_TOOL_INPUT_CHARS = 4000;
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
 
@@ -79,7 +82,15 @@ function readRulesFromDir(dir: string): Rule[] {
 function loadRules(cwd: string): Rule[] {
 	return [
 		...readRulesFromDir(GLOBAL_RULES_DIR),
+		...readRulesFromDir(path.join(USER_DIR, "output-rules")),
 		...readRulesFromDir(path.join(cwd, PROJECT_RULES_DIR)),
+	];
+}
+
+function loadToolRules(cwd: string): Rule[] {
+	return [
+		...readRulesFromDir(path.join(USER_DIR, "tool-rules")),
+		...readRulesFromDir(path.join(cwd, PROJECT_TOOL_RULES_DIR)),
 	];
 }
 
@@ -125,6 +136,32 @@ function buildClassifierPrompt(rules: Rule[], reply: string): string {
 		"</reply>",
 		"",
 		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<rule heading>", "reason": "short reason"}, ...]}',
+	].join("\n");
+}
+
+function buildToolPrompt(
+	rules: Rule[],
+	toolName: string,
+	input: unknown,
+): string {
+	const rulesText = rules
+		.map((rule) => `### ${rule.name}\n${rule.text}`)
+		.join("\n\n");
+	return [
+		"You are a strict policy checker for an AI coding assistant's tool calls.",
+		"Judge the tool call below against the rules. Fail it only when a rule clearly forbids it.",
+		"Each violation reason is sent back to the assistant as a direct order, so write it as an",
+		"imperative instruction telling the assistant what to do instead. Never address the user.",
+		"",
+		"<rules>",
+		rulesText,
+		"</rules>",
+		"",
+		`<tool name="${toolName}">`,
+		JSON.stringify(input ?? {}).slice(0, MAX_TOOL_INPUT_CHARS),
+		"</tool>",
+		"",
+		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<rule heading>", "reason": "instruction for the assistant"}, ...]}',
 	].join("\n");
 }
 
@@ -260,6 +297,7 @@ function isFinalAssistantReply(message: EndedMessage): boolean {
 
 class Classifier {
 	private rules: Rule[] = [];
+	private toolRules: Rule[] = [];
 	private modelSpec = DEFAULT_MODEL_SPEC;
 	private isEnabled = true;
 	private readonly pi: ExtensionAPI;
@@ -270,8 +308,9 @@ class Classifier {
 
 	start(ctx: ExtensionContext): void {
 		this.rules = loadRules(ctx.cwd);
+		this.toolRules = loadToolRules(ctx.cwd);
 		this.modelSpec = resolveModelSpec(ctx.cwd);
-		if (this.rules.length > 0) {
+		if (this.rules.length + this.toolRules.length > 0) {
 			this.showIdleStatus(ctx);
 		}
 	}
@@ -304,6 +343,37 @@ class Classifier {
 		}
 		this.requestRewrite(ctx, reply, verdict.violations);
 		return { message: withheldPlaceholder(event.message) };
+	}
+
+	async onToolCall(
+		event: { toolName: string; input: unknown },
+		ctx: ExtensionContext,
+	): Promise<{ block: true; reason: string } | undefined> {
+		if (!this.isEnabled || this.toolRules.length === 0) {
+			return undefined;
+		}
+		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
+		let verdict: Verdict;
+		try {
+			verdict = await requestVerdict(
+				ctx,
+				this.modelSpec,
+				buildToolPrompt(this.toolRules, event.toolName, event.input),
+			);
+		} catch (error) {
+			debugLog(`tool classifier error: ${String(error)}`);
+			this.setStatus(ctx, `${ENABLED_MARK} classifier ?`);
+			return undefined;
+		}
+		if (verdict.pass || verdict.violations.length === 0) {
+			this.showIdleStatus(ctx);
+			return undefined;
+		}
+		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2298 ${event.toolName}`);
+		return {
+			block: true,
+			reason: verdict.violations.map(formatViolation).join("\n"),
+		};
 	}
 
 	toggle(ctx: ExtensionContext): void {
@@ -377,7 +447,7 @@ class Classifier {
 		this.setStatus(
 			ctx,
 			this.isEnabled
-				? `${ENABLED_MARK} classifier (${this.rules.length})`
+				? `${ENABLED_MARK} classifier (${this.rules.length + this.toolRules.length})`
 				: `${DISABLED_MARK} classifier off`,
 		);
 	}
@@ -394,9 +464,10 @@ export default function outputClassifier(pi: ExtensionAPI) {
 	pi.on("message_end", async (event, ctx) =>
 		classifier.onMessageEnd(event, ctx),
 	);
+	pi.on("tool_call", async (event, ctx) => classifier.onToolCall(event, ctx));
 	pi.registerCommand("classifier", {
 		description:
-			"Toggle the output classifier (rules in rules/ and .pi/output-rules/) on or off",
+			"Toggle the classifier (output rules in .pi/output-rules/, tool rules in .pi/tool-rules/) on or off",
 		handler: async (_args, ctx) => classifier.toggle(ctx),
 	});
 }
