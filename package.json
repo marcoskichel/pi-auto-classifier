@@ -24,6 +24,7 @@
   ],
   "scripts": {
     "check": "tsc && biome check && node no-comments.ts index.ts",
+    "dev": "sh dev.sh",
     "test": "node --test",
     "fix": "biome check --write"
   },

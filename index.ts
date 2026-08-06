@@ -8,7 +8,6 @@ import {
 	CONFIG_DIR_NAME,
 	type ExtensionAPI,
 	type ExtensionContext,
-	type Theme,
 } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_MODEL_SPEC = "anthropic/claude-haiku-4-5";
@@ -30,7 +29,6 @@ const GLOBAL_RULES_DIR = path.join(
 );
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
-const BADGE_HINT = "/classifier to toggle";
 
 type Rule = { name: string; text: string };
 type Violation = { rule: string; reason: string };
@@ -71,7 +69,7 @@ function readRulesFromDir(dir: string): Rule[] {
 	return fs
 		.readdirSync(dir)
 		.filter((file) => file.endsWith(".md"))
-		.sort()
+		.sort((a, b) => a.localeCompare(b))
 		.map((file) => ({
 			name: file,
 			text: fs.readFileSync(path.join(dir, file), "utf8").trim(),
@@ -100,8 +98,7 @@ function textFromContent(content: unknown): string {
 	}
 	if (Array.isArray(content)) {
 		return content
-			.filter(isTextBlock)
-			.map((block) => block.text)
+			.flatMap((block) => (isTextBlock(block) ? [block.text] : []))
 			.join("\n")
 			.trim();
 	}
@@ -265,8 +262,6 @@ class Classifier {
 	private rules: Rule[] = [];
 	private modelSpec = DEFAULT_MODEL_SPEC;
 	private isEnabled = true;
-	private badgeText = "";
-	private requestBadgeRender: (() => void) | undefined;
 	private readonly pi: ExtensionAPI;
 
 	constructor(pi: ExtensionAPI) {
@@ -277,7 +272,6 @@ class Classifier {
 		this.rules = loadRules(ctx.cwd);
 		this.modelSpec = resolveModelSpec(ctx.cwd);
 		if (this.rules.length > 0) {
-			this.mountBadge(ctx);
 			this.showIdleStatus(ctx);
 		}
 	}
@@ -374,10 +368,7 @@ class Classifier {
 	}
 
 	private setStatus(ctx: ExtensionContext, text: string): void {
-		this.badgeText = text;
-		if (this.requestBadgeRender) {
-			this.requestBadgeRender();
-		} else if (ctx.hasUI) {
+		if (ctx.hasUI) {
 			ctx.ui.setStatus(STATUS_KEY, text);
 		}
 	}
@@ -388,32 +379,6 @@ class Classifier {
 			this.isEnabled
 				? `${ENABLED_MARK} classifier (${this.rules.length})`
 				: `${DISABLED_MARK} classifier off`,
-		);
-	}
-
-	private badgeLine(theme: Theme, width: number): string {
-		const plain = `${this.badgeText}  ${BADGE_HINT}`;
-		const pad = " ".repeat(Math.max(0, width - plain.length));
-		const styled =
-			theme.fg(this.isEnabled ? "accent" : "dim", this.badgeText) +
-			theme.fg("dim", `  ${BADGE_HINT}`);
-		return pad + styled;
-	}
-
-	private mountBadge(ctx: ExtensionContext): void {
-		if (!ctx.hasUI || this.requestBadgeRender) {
-			return;
-		}
-		ctx.ui.setWidget(
-			STATUS_KEY,
-			(tui, theme) => {
-				this.requestBadgeRender = () => tui.requestRender();
-				return {
-					render: (width: number) => [this.badgeLine(theme, width)],
-					invalidate() {},
-				};
-			},
-			{ placement: "belowEditor" },
 		);
 	}
 }
