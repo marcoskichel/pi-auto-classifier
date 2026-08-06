@@ -71,7 +71,7 @@ function readRulesFromDir(dir: string): Rule[] {
 	return fs
 		.readdirSync(dir)
 		.filter((file) => file.endsWith(".md"))
-		.sort()
+		.sort((a, b) => a.localeCompare(b))
 		.map((file) => ({
 			name: file,
 			text: fs.readFileSync(path.join(dir, file), "utf8").trim(),
@@ -100,8 +100,7 @@ function textFromContent(content: unknown): string {
 	}
 	if (Array.isArray(content)) {
 		return content
-			.filter(isTextBlock)
-			.map((block) => block.text)
+			.flatMap((block) => (isTextBlock(block) ? [block.text] : []))
 			.join("\n")
 			.trim();
 	}
@@ -398,12 +397,9 @@ class Classifier {
 	private giveUp(ctx: ExtensionContext, violations: Violation[]): void {
 		this.blockedRules = new Set();
 		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2717`);
-		if (ctx.hasUI) {
-			ctx.ui.notify(
-				`Output still violates rules: ${violations.map(formatViolation).join("; ")}`,
-				"warning",
-			);
-		}
+		debugLog(
+			`gave up, still violates: ${violations.map(formatViolation).join("; ")}`,
+		);
 	}
 
 	private setStatus(ctx: ExtensionContext, text: string): void {
