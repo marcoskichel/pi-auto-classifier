@@ -1,6 +1,6 @@
 # pi-output-classifier
 
-A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. It keeps asking for rewrites until the reply passes. Classifier errors fail open.
+A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules, and every tool call against markdown tool rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. It keeps asking for rewrites until the reply passes. Classifier errors fail open.
 
 Ships with one rule: [ASD-STE100 Simplified Technical English + TLDR](rules/ste-tldr.md) — active voice, short sentences, answer first, no filler.
 
@@ -33,8 +33,19 @@ Rules are markdown files — plain prose the classifier model can judge against.
 
 | Location | Scope |
 | --- | --- |
-| `rules/` (inside this repo) | global, bundled |
-| `<project>/.pi/output-rules/` | per project |
+| `rules/` (inside this repo) | output rules, bundled |
+| `~/.pi/agent/output-rules/` | output rules, all projects |
+| `<project>/.pi/output-rules/` | output rules, per project |
+| `~/.pi/agent/tool-rules/` | tool rules, all projects |
+| `<project>/.pi/tool-rules/` | tool rules, per project |
+
+## Tool rules
+
+When tool rules exist, the classifier judges every tool call before it runs. A violation blocks the call and sends the violation text back to the model as an instruction, so the model changes course without asking you.
+
+No tool rules are bundled. Write your own, for example a rule that blocks `git switch` and `git checkout -b` and orders the agent to use a worktree.
+
+Tool rules cost one classifier call per tool call, so keep the rule set small.
 
 ## Configuration
 
