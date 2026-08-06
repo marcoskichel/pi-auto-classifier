@@ -30,12 +30,24 @@ const GLOBAL_RULES_DIR = path.join(
 	"rules",
 );
 const MAX_TOOL_INPUT_CHARS = 4000;
+const MAX_USER_REQUEST_CHARS = 2000;
+const FEEDBACK_PREFIX = "Your draft reply below was withheld";
+const TOOL_PROMPT_HEADER = [
+	"You are a strict policy checker for an AI coding assistant's tool calls.",
+	"Judge the tool call below against the rules. Fail it only when a rule clearly forbids it.",
+	"Each violation reason goes back to the assistant as a direct order, so write it as an",
+	"imperative instruction that names the action to take instead. Never address the user.",
+].join("\n");
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
 
 type Rule = { name: string; text: string };
 type Violation = { rule: string; reason: string };
-type Verdict = { pass: boolean; violations: Violation[] };
+type Verdict = {
+	pass: boolean;
+	violations: Violation[];
+	userAsked?: boolean;
+};
 type ClassifierConfig = { model?: string };
 type TextBlock = { type: "text"; text: string };
 type DraftMessage = { role?: string; content?: unknown };
@@ -143,15 +155,17 @@ function buildToolPrompt(
 	rules: Rule[],
 	toolName: string,
 	input: unknown,
+	userRequest: string,
 ): string {
 	const rulesText = rules
 		.map((rule) => `### ${rule.name}\n${rule.text}`)
 		.join("\n\n");
 	return [
-		"You are a strict policy checker for an AI coding assistant's tool calls.",
-		"Judge the tool call below against the rules. Fail it only when a rule clearly forbids it.",
-		"Each violation reason is sent back to the assistant as a direct order, so write it as an",
-		"imperative instruction telling the assistant what to do instead. Never address the user.",
+		TOOL_PROMPT_HEADER,
+		"",
+		"<user_request>",
+		userRequest.slice(0, MAX_USER_REQUEST_CHARS),
+		"</user_request>",
 		"",
 		"<rules>",
 		rulesText,
@@ -162,6 +176,39 @@ function buildToolPrompt(
 		"</tool>",
 		"",
 		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<rule heading>", "reason": "instruction for the assistant"}, ...]}',
+	].join("\n");
+}
+
+function buildOverridePrompt(
+	rules: Rule[],
+	violations: Violation[],
+	toolName: string,
+	input: unknown,
+	userRequest: string,
+): string {
+	const blocked = rules
+		.filter((rule) => violations.some((v) => v.rule === rule.name))
+		.map((rule) => `### ${rule.name}\n${rule.text}`)
+		.join("\n\n");
+	return [
+		"A policy rule blocked a tool call. Decide whether the user already ordered that action.",
+		"Answer yes when the user request asks for this action, or asks for something that needs it.",
+		"Answer no when the rule states that it holds even when the user asks for the action.",
+		"Answer no when the request never mentions this action.",
+		"",
+		"<user_request>",
+		userRequest.slice(0, MAX_USER_REQUEST_CHARS),
+		"</user_request>",
+		"",
+		"<blocked_rules>",
+		blocked,
+		"</blocked_rules>",
+		"",
+		`<tool name="${toolName}">`,
+		JSON.stringify(input ?? {}).slice(0, MAX_TOOL_INPUT_CHARS),
+		"</tool>",
+		"",
+		'Respond with ONLY this JSON, nothing else: {"userAsked": true|false}',
 	].join("\n");
 }
 
@@ -186,11 +233,13 @@ function parseVerdict(raw: string): Verdict {
 		const parsed = JSON.parse(jsonCandidate) as {
 			pass?: boolean;
 			violations?: unknown[];
+			userAsked?: boolean;
 		};
 		const entries = Array.isArray(parsed.violations) ? parsed.violations : [];
 		return {
 			pass: parsed.pass !== false,
 			violations: entries.map(toViolation),
+			userAsked: parsed.userAsked === true,
 		};
 	} catch {
 		debugLog(`invalid verdict JSON: ${jsonCandidate}`);
@@ -254,7 +303,7 @@ function formatViolation(violation: Violation): string {
 
 function buildRewriteFeedback(draft: string, violations: Violation[]): string {
 	return [
-		"Your draft reply below was withheld from the user because it violates the output rules:",
+		`${FEEDBACK_PREFIX} from the user because it violates the output rules:`,
 		...violations.map((violation) => `- ${formatViolation(violation)}`),
 		"",
 		"<draft>",
@@ -298,6 +347,7 @@ function isFinalAssistantReply(message: EndedMessage): boolean {
 class Classifier {
 	private rules: Rule[] = [];
 	private toolRules: Rule[] = [];
+	private userRequest = "";
 	private modelSpec = DEFAULT_MODEL_SPEC;
 	private isEnabled = true;
 	private readonly pi: ExtensionAPI;
@@ -329,6 +379,10 @@ class Classifier {
 		event: { message: M },
 		ctx: ExtensionContext,
 	): Promise<{ message: M } | undefined> {
+		if (event.message.role === "user") {
+			this.captureUserRequest(textFromContent(event.message.content));
+			return undefined;
+		}
 		const reply = this.replyToCheck(event.message);
 		if (reply === undefined) {
 			return undefined;
@@ -345,6 +399,69 @@ class Classifier {
 		return { message: withheldPlaceholder(event.message) };
 	}
 
+	private async classifyToolCall(
+		ctx: ExtensionContext,
+		event: { toolName: string; input: unknown },
+	): Promise<Verdict | undefined> {
+		try {
+			debugLog(
+				buildToolPrompt(
+					this.toolRules,
+					event.toolName,
+					event.input,
+					this.userRequest,
+				),
+			);
+			return await requestVerdict(
+				ctx,
+				this.modelSpec,
+				buildToolPrompt(
+					this.toolRules,
+					event.toolName,
+					event.input,
+					this.userRequest,
+				),
+			);
+		} catch (error) {
+			debugLog(`tool classifier error: ${String(error)}`);
+			this.setStatus(ctx, `${ENABLED_MARK} classifier ?`);
+			return undefined;
+		}
+	}
+
+	private async userAskedFor(
+		ctx: ExtensionContext,
+		event: { toolName: string; input: unknown },
+		violations: Violation[],
+	): Promise<boolean> {
+		if (this.userRequest.length === 0) {
+			return false;
+		}
+		try {
+			const answer = await requestVerdict(
+				ctx,
+				this.modelSpec,
+				buildOverridePrompt(
+					this.toolRules,
+					violations,
+					event.toolName,
+					event.input,
+					this.userRequest,
+				),
+			);
+			return answer.userAsked === true;
+		} catch (error) {
+			debugLog(`override check failed: ${String(error)}`);
+			return false;
+		}
+	}
+
+	captureUserRequest(text: string): void {
+		if (text.length > 0 && !text.startsWith(FEEDBACK_PREFIX)) {
+			this.userRequest = text;
+		}
+	}
+
 	async onToolCall(
 		event: { toolName: string; input: unknown },
 		ctx: ExtensionContext,
@@ -353,20 +470,16 @@ class Classifier {
 			return undefined;
 		}
 		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
-		let verdict: Verdict;
-		try {
-			verdict = await requestVerdict(
-				ctx,
-				this.modelSpec,
-				buildToolPrompt(this.toolRules, event.toolName, event.input),
-			);
-		} catch (error) {
-			debugLog(`tool classifier error: ${String(error)}`);
-			this.setStatus(ctx, `${ENABLED_MARK} classifier ?`);
+		const verdict = await this.classifyToolCall(ctx, event);
+		if (!verdict) {
 			return undefined;
 		}
 		if (verdict.pass || verdict.violations.length === 0) {
 			this.showIdleStatus(ctx);
+			return undefined;
+		}
+		if (await this.userAskedFor(ctx, event, verdict.violations)) {
+			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713 user asked`);
 			return undefined;
 		}
 		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2298 ${event.toolName}`);
@@ -464,6 +577,7 @@ export default function outputClassifier(pi: ExtensionAPI) {
 	pi.on("message_end", async (event, ctx) =>
 		classifier.onMessageEnd(event, ctx),
 	);
+	pi.on("input", async (event) => classifier.captureUserRequest(event.text));
 	pi.on("tool_call", async (event, ctx) => classifier.onToolCall(event, ctx));
 	pi.registerCommand("classifier", {
 		description:
