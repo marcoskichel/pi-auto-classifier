@@ -23,10 +23,6 @@ Or add a local checkout to `~/.pi/agent/settings.json`:
 - `/classifier` — toggle on/off
 - The status bar shows the current state
 
-## Development
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ## Rules
 
 Rules are markdown files — plain prose the classifier model can judge against. All `.md` files in these directories load:
@@ -67,3 +63,7 @@ Classifier model, resolved in this order:
 4. Default: `anthropic/claude-haiku-4-5`
 
 Set `PI_AUTO_CLASSIFIER_DEBUG=/path/to/log` to log classifier verdicts and errors.
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
