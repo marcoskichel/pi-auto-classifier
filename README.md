@@ -1,4 +1,4 @@
-# pi-output-classifier
+# pi-auto-classifier
 
 A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules, and every tool call against markdown tool rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. It keeps asking for rewrites until the reply passes. Classifier errors fail open.
 
@@ -7,14 +7,14 @@ Ships with one rule: [ASD-STE100 Simplified Technical English + TLDR](rules/ste-
 ## Install
 
 ```bash
-pi install npm:pi-output-classifier
+pi install npm:pi-auto-classifier
 ```
 
 Or add a local checkout to `~/.pi/agent/settings.json`:
 
 ```json
 {
-  "extensions": ["/path/to/pi-output-classifier/index.ts"]
+  "extensions": ["/path/to/pi-auto-classifier/index.ts"]
 }
 ```
 
@@ -61,9 +61,9 @@ Block this action even when the user asks for it.
 
 Classifier model, resolved in this order:
 
-1. `PI_OUTPUT_CLASSIFIER_MODEL` env var
-2. `<project>/.pi/output-classifier.json` → `{ "model": "..." }`
-3. `~/.pi/agent/output-classifier.json` → `{ "model": "..." }`
+1. `PI_AUTO_CLASSIFIER_MODEL` env var
+2. `<project>/.pi/auto-classifier.json` → `{ "model": "..." }`
+3. `~/.pi/agent/auto-classifier.json` → `{ "model": "..." }`
 4. Default: `anthropic/claude-haiku-4-5`
 
-Set `PI_OUTPUT_CLASSIFIER_DEBUG=/path/to/log` to log classifier verdicts and errors.
+Set `PI_AUTO_CLASSIFIER_DEBUG=/path/to/log` to log classifier verdicts and errors.

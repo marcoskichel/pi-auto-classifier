@@ -11,17 +11,17 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_MODEL_SPEC = "anthropic/claude-haiku-4-5";
-const CONFIG_FILE_NAME = "output-classifier.json";
+const CONFIG_FILE_NAME = "auto-classifier.json";
 const GLOBAL_CONFIG_PATH = path.join(
 	os.homedir(),
 	CONFIG_DIR_NAME,
 	"agent",
 	CONFIG_FILE_NAME,
 );
-const DEBUG_LOG_PATH = process.env.PI_OUTPUT_CLASSIFIER_DEBUG;
+const DEBUG_LOG_PATH = process.env.PI_AUTO_CLASSIFIER_DEBUG;
 const MIN_REPLY_LENGTH = 40;
-const STATUS_KEY = "output-classifier";
-const FEEDBACK_MESSAGE_TYPE = "output-classifier";
+const STATUS_KEY = "auto-classifier";
+const FEEDBACK_MESSAGE_TYPE = "auto-classifier";
 const PROJECT_RULES_DIR = path.join(".pi", "output-rules");
 const PROJECT_TOOL_RULES_DIR = path.join(".pi", "tool-rules");
 const USER_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
@@ -70,7 +70,7 @@ function readConfigFile(filePath: string): ClassifierConfig {
 function resolveModelSpec(cwd: string): string {
 	const projectConfigPath = path.join(cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME);
 	return (
-		process.env.PI_OUTPUT_CLASSIFIER_MODEL ??
+		process.env.PI_AUTO_CLASSIFIER_MODEL ??
 		readConfigFile(projectConfigPath).model ??
 		readConfigFile(GLOBAL_CONFIG_PATH).model ??
 		DEFAULT_MODEL_SPEC
@@ -334,7 +334,7 @@ function withheldPlaceholder<T extends object>(message: T): T {
 		content: [
 			{
 				type: "text",
-				text: "(draft withheld by output classifier, rewriting)",
+				text: "(draft withheld by auto classifier, rewriting)",
 			},
 		],
 	} as T;
@@ -494,7 +494,7 @@ class Classifier {
 		this.showIdleStatus(ctx);
 		if (ctx.hasUI) {
 			ctx.ui.notify(
-				`Output classifier ${this.isEnabled ? "enabled" : "disabled"}`,
+				`Auto classifier ${this.isEnabled ? "enabled" : "disabled"}`,
 				"info",
 			);
 		}
@@ -566,7 +566,7 @@ class Classifier {
 	}
 }
 
-export default function outputClassifier(pi: ExtensionAPI) {
+export default function autoClassifier(pi: ExtensionAPI) {
 	const classifier = new Classifier(pi);
 	const hideDraft = async (event: { message: DraftMessage }) =>
 		classifier.hideDraft(event.message);

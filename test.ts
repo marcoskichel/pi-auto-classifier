@@ -6,7 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import outputClassifier from "./index.ts";
+import autoClassifier from "./index.ts";
 
 function runNoComments(source: string): { code: number; output: string } {
 	const file = path.join(
@@ -58,7 +58,7 @@ function setup() {
 		},
 	};
 
-	outputClassifier(pi as unknown as ExtensionAPI);
+	autoClassifier(pi as unknown as ExtensionAPI);
 	return {
 		handlers: handlers as Record<string, Call>,
 		commands: commands as Record<string, { handler: Call }>,
@@ -100,7 +100,7 @@ test("toggle flips the badge and notifies", async () => {
 	await app.handlers.session_start({}, app.ctx);
 	await app.commands.classifier.handler([], app.ctx);
 	assert.match(app.badge(), /classifier off/);
-	assert.deepEqual(app.notices, ["Output classifier disabled"]);
+	assert.deepEqual(app.notices, ["Auto classifier disabled"]);
 });
 
 test("message_start blanks assistant draft text", async () => {

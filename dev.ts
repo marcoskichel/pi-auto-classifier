@@ -4,7 +4,7 @@ import * as path from "node:path";
 
 const SETTINGS = path.join(os.homedir(), ".pi", "agent", "settings.json");
 const BACKUP = `${SETTINGS}.dev-backup`;
-const PACKAGE = "npm:pi-output-classifier";
+const PACKAGE = "npm:pi-auto-classifier";
 const ENTRY = path.resolve(import.meta.dirname, "index.ts");
 
 type Settings = { packages?: string[]; extensions?: string[] };

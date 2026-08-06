@@ -1,5 +1,5 @@
 {
-  "name": "pi-output-classifier",
+  "name": "pi-auto-classifier",
   "version": "0.4.0",
   "description": "Pi extension that classifies every final assistant reply against markdown output rules and asks the model to rewrite violations. Ships with an ASD-STE100 Simplified Technical English + TLDR rule.",
   "keywords": [
@@ -14,7 +14,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/marcoskichel/pi-output-classifier.git"
+    "url": "git+https://github.com/marcoskichel/pi-auto-classifier.git"
   },
   "files": [
     "index.ts",

@@ -1,4 +1,4 @@
-# pi-output-classifier
+# pi-auto-classifier
 
 IMPORTANT: Invoke the `testing-locally` skill before you push any change to
 `index.ts`, `dev.ts`, or a rule file. Unit tests never load the extension, so a
