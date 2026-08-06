@@ -47,6 +47,16 @@ No tool rules are bundled. Write your own, for example a rule that blocks `git s
 
 Tool rules cost one classifier call per tool call, so keep the rule set small.
 
+### The user overrides a rule
+
+A block runs a second check. The classifier reads your last message. It passes the call when you asked for that action yourself, so "switch branch" performs the switch even under a rule that blocks branch switches.
+
+A rule can refuse the override with one line:
+
+```markdown
+Block this action even when the user asks for it.
+```
+
 ## Configuration
 
 Classifier model, resolved in this order:
