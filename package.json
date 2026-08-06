@@ -18,7 +18,9 @@
   },
   "files": [
     "index.ts",
+    "dev.ts",
     "rules",
+    "skills",
     "README.md",
     "LICENSE"
   ],
@@ -26,7 +28,8 @@
     "check": "tsc && biome check && node no-comments.ts index.ts",
     "dev": "sh dev.sh",
     "test": "node --test",
-    "fix": "biome check --write"
+    "fix": "biome check --write",
+    "dev": "node dev.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
@@ -41,6 +44,9 @@
   "pi": {
     "extensions": [
       "./index.ts"
+    ],
+    "skills": [
+      "./skills"
     ]
   }
 }
