@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/marcoskichel/pi-output-classifier/compare/pi-output-classifier-v0.4.0...pi-output-classifier-v0.5.0) (2026-08-06)
+
+
+### Features
+
+* add testing-locally skill and dev script ([#18](https://github.com/marcoskichel/pi-output-classifier/issues/18)) ([cff9c1d](https://github.com/marcoskichel/pi-output-classifier/commit/cff9c1df7fadfb8e9bcc6ca361c21cbd241327fa))
+* classify and block tool calls against tool rules ([#17](https://github.com/marcoskichel/pi-output-classifier/issues/17)) ([0b62dc2](https://github.com/marcoskichel/pi-output-classifier/commit/0b62dc2b926ea1779c3814f6bc2ec2e100abfa4b))
+
 ## [0.4.0](https://github.com/marcoskichel/pi-output-classifier/compare/pi-output-classifier-v0.3.0...pi-output-classifier-v0.4.0) (2026-08-06)
 
 
