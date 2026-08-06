@@ -265,7 +265,6 @@ class Classifier {
 	private rules: Rule[] = [];
 	private modelSpec = DEFAULT_MODEL_SPEC;
 	private isEnabled = true;
-	private blockedRules = new Set<string>();
 	private badgeText = "";
 	private requestBadgeRender: (() => void) | undefined;
 	private readonly pi: ExtensionAPI;
@@ -280,12 +279,6 @@ class Classifier {
 		if (this.rules.length > 0) {
 			this.mountBadge(ctx);
 			this.showIdleStatus(ctx);
-		}
-	}
-
-	onInput(event: { source?: string }): void {
-		if (event.source !== "extension") {
-			this.blockedRules = new Set();
 		}
 	}
 
@@ -312,12 +305,7 @@ class Classifier {
 			return undefined;
 		}
 		if (verdict.pass) {
-			this.blockedRules = new Set();
 			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
-			return undefined;
-		}
-		if (this.takeFreshViolations(verdict.violations).length === 0) {
-			this.giveUp(ctx, verdict.violations);
 			return undefined;
 		}
 		this.requestRewrite(ctx, reply, verdict.violations);
@@ -345,16 +333,6 @@ class Classifier {
 		}
 		const reply = textFromContent(message.content);
 		return reply.length < MIN_REPLY_LENGTH ? undefined : reply;
-	}
-
-	private takeFreshViolations(violations: Violation[]): Violation[] {
-		const fresh = violations.filter(
-			(violation) => !this.blockedRules.has(violation.rule),
-		);
-		for (const violation of fresh) {
-			this.blockedRules.add(violation.rule);
-		}
-		return fresh;
 	}
 
 	private async classifyReply(
@@ -392,17 +370,6 @@ class Classifier {
 			);
 		} catch (error) {
 			debugLog(`rewrite skipped, session is shutting down: ${String(error)}`);
-		}
-	}
-
-	private giveUp(ctx: ExtensionContext, violations: Violation[]): void {
-		this.blockedRules = new Set();
-		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2717`);
-		if (ctx.hasUI) {
-			ctx.ui.notify(
-				`Output still violates rules: ${violations.map(formatViolation).join("; ")}`,
-				"warning",
-			);
 		}
 	}
 
@@ -457,7 +424,6 @@ export default function outputClassifier(pi: ExtensionAPI) {
 		classifier.hideDraft(event.message);
 
 	pi.on("session_start", async (_event, ctx) => classifier.start(ctx));
-	pi.on("input", async (event) => classifier.onInput(event));
 	pi.on("message_start", hideDraft);
 	pi.on("message_update", hideDraft);
 	pi.on("message_end", async (event, ctx) =>
