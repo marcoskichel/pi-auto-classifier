@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.0.0...pi-auto-classifier-v1.1.0) (2026-08-07)
+
+
+### Features
+
+* include violation reasons in withheld placeholder ([#28](https://github.com/marcoskichel/pi-auto-classifier/issues/28)) ([2f56889](https://github.com/marcoskichel/pi-auto-classifier/commit/2f56889cb96df047e5a00c179a3010be8b397a79))
+
 ## [1.0.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v0.4.0...pi-auto-classifier-v1.0.0) (2026-08-06)
 
 
