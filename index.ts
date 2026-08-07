@@ -32,6 +32,7 @@ const GLOBAL_RULES_DIR = path.join(
 const MAX_TOOL_INPUT_CHARS = 4000;
 const MAX_USER_REQUEST_CHARS = 2000;
 const FEEDBACK_PREFIX = "Your draft reply below was withheld";
+const WITHHELD_PREFIX = "(withheld by classifier";
 const TOOL_PROMPT_HEADER = [
 	"You are a strict policy checker for an AI coding assistant's tool calls.",
 	"Judge the tool call below against the rules. Fail it only when a rule clearly forbids it.",
@@ -338,7 +339,7 @@ function withheldPlaceholder<T extends object>(
 		content: [
 			{
 				type: "text",
-				text: `(withheld by classifier, rewriting: ${reasons})`,
+				text: `${WITHHELD_PREFIX}, rewriting: ${reasons})`,
 			},
 		],
 	} as T;
@@ -513,7 +514,10 @@ class Classifier {
 			return undefined;
 		}
 		const reply = textFromContent(message.content);
-		return reply.length < MIN_REPLY_LENGTH ? undefined : reply;
+		if (reply.length < MIN_REPLY_LENGTH || reply.startsWith(WITHHELD_PREFIX)) {
+			return undefined;
+		}
+		return reply;
 	}
 
 	private async classifyReply(

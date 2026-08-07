@@ -134,6 +134,23 @@ test("message_end ignores replies below the length floor", async () => {
 	assert.deepEqual(app.sent, []);
 });
 
+test("message_end never re-classifies its own withheld placeholder", async () => {
+	const app = setup();
+	await app.handlers.session_start({}, app.ctx);
+	const message = {
+		role: "assistant",
+		stopReason: "stop",
+		content: [
+			{
+				type: "text",
+				text: "(withheld by classifier, rewriting: empty reply with no answer)",
+			},
+		],
+	};
+	assert.equal(await app.handlers.message_end({ message }, app.ctx), undefined);
+	assert.deepEqual(app.sent, []);
+});
+
 test("message_end passes the reply through when no model is configured", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
