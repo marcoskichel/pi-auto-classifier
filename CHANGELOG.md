@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.1.0...pi-auto-classifier-v1.1.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* never re-classify the withheld placeholder ([#31](https://github.com/marcoskichel/pi-auto-classifier/issues/31)) ([1f2da43](https://github.com/marcoskichel/pi-auto-classifier/commit/1f2da436c5f1279c8dd91802c3911b2b8ceb031c))
+
 ## [1.1.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.0.0...pi-auto-classifier-v1.1.0) (2026-08-07)
 
 
