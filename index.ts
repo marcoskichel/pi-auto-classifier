@@ -328,13 +328,17 @@ function maskDraftText(message: DraftMessage): void {
 	);
 }
 
-function withheldPlaceholder<T extends object>(message: T): T {
+function withheldPlaceholder<T extends object>(
+	message: T,
+	violations: Violation[],
+): T {
+	const reasons = violations.map((v) => v.reason).join("; ");
 	return {
 		...message,
 		content: [
 			{
 				type: "text",
-				text: "(draft withheld by auto classifier, rewriting)",
+				text: `(withheld by classifier, rewriting: ${reasons})`,
 			},
 		],
 	} as T;
@@ -396,7 +400,7 @@ class Classifier {
 			return undefined;
 		}
 		this.requestRewrite(ctx, reply, verdict.violations);
-		return { message: withheldPlaceholder(event.message) };
+		return { message: withheldPlaceholder(event.message, verdict.violations) };
 	}
 
 	private async classifyToolCall(
