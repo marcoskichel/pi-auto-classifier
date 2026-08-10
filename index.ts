@@ -180,6 +180,17 @@ function buildToolPrompt(
 	].join("\n");
 }
 
+function blockedRulesText(rules: Rule[], violations: Violation[]): string {
+	return rules
+		.filter((rule) =>
+			violations.some(
+				(v) => v.rule === rule.name || rule.text.includes(v.rule),
+			),
+		)
+		.map((rule) => `### ${rule.name}\n${rule.text}`)
+		.join("\n\n");
+}
+
 function buildOverridePrompt(
 	rules: Rule[],
 	violations: Violation[],
@@ -187,10 +198,7 @@ function buildOverridePrompt(
 	input: unknown,
 	userRequest: string,
 ): string {
-	const blocked = rules
-		.filter((rule) => violations.some((v) => v.rule === rule.name))
-		.map((rule) => `### ${rule.name}\n${rule.text}`)
-		.join("\n\n");
+	const blocked = blockedRulesText(rules, violations);
 	return [
 		"A policy rule blocked a tool call. Decide whether the user already ordered that action.",
 		"Answer yes when the user request asks for this action, or asks for something that needs it.",
