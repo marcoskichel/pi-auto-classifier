@@ -6,7 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import autoClassifier from "./index.ts";
+import autoClassifier, { limitTldr } from "./index.ts";
 
 function runNoComments(source: string): { code: number; output: string } {
 	const file = path.join(
@@ -183,4 +183,22 @@ test("tool_call fails open and counts project tool rules", async () => {
 		ctx,
 	);
 	assert.equal(blocked, undefined);
+});
+
+test("tldr violations carry the fixed message and fail only once", () => {
+	const violations = [
+		{ rule: "ste-tldr.md", reason: "rambling" },
+		{ rule: "other.md", reason: "keep me" },
+	];
+	assert.deepEqual(limitTldr(violations, false), [
+		{
+			rule: "ste-tldr.md",
+			reason:
+				"Make your reply much shorter, like a TLDR, remove trivia and all unnecessary details",
+		},
+		{ rule: "other.md", reason: "keep me" },
+	]);
+	assert.deepEqual(limitTldr(violations, true), [
+		{ rule: "other.md", reason: "keep me" },
+	]);
 });

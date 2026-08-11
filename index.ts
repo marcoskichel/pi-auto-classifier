@@ -32,6 +32,9 @@ const GLOBAL_RULES_DIR = path.join(
 const MAX_TOOL_INPUT_CHARS = 4000;
 const MAX_USER_REQUEST_CHARS = 2000;
 const FEEDBACK_PREFIX = "Your draft reply below was withheld";
+const TLDR_RULE_MATCH = "tldr";
+const TLDR_MESSAGE =
+	"Make your reply much shorter, like a TLDR, remove trivia and all unnecessary details";
 const WITHHELD_PREFIX = "(withheld by classifier";
 const TOOL_PROMPT_HEADER = [
 	"You are a strict policy checker for an AI coding assistant's tool calls.",
@@ -298,6 +301,17 @@ async function requestVerdict(
 	return verdict;
 }
 
+export function limitTldr(
+	violations: Violation[],
+	alreadyFailed: boolean,
+): Violation[] {
+	const isTldr = (v: Violation) =>
+		v.rule.toLowerCase().includes(TLDR_RULE_MATCH);
+	return violations
+		.filter((v) => !isTldr(v) || !alreadyFailed)
+		.map((v) => (isTldr(v) ? { ...v, reason: TLDR_MESSAGE } : v));
+}
+
 function formatViolation(violation: Violation): string {
 	return `[${violation.rule}] ${violation.reason}`;
 }
@@ -353,6 +367,7 @@ class Classifier {
 	private rules: Rule[] = [];
 	private toolRules: Rule[] = [];
 	private userRequest = "";
+	private tldrFailed = false;
 	private modelSpec = DEFAULT_MODEL_SPEC;
 	private isEnabled = true;
 	private readonly pi: ExtensionAPI;
@@ -396,12 +411,13 @@ class Classifier {
 		if (!verdict) {
 			return undefined;
 		}
-		if (verdict.pass) {
+		const violations = this.applyTldrLimit(verdict.violations);
+		if (verdict.pass || violations.length === 0) {
 			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
 			return undefined;
 		}
-		this.requestRewrite(ctx, reply, verdict.violations);
-		return { message: withheldPlaceholder(event.message, verdict.violations) };
+		this.requestRewrite(ctx, reply, violations);
+		return { message: withheldPlaceholder(event.message, violations) };
 	}
 
 	private async classifyToolCall(
@@ -464,7 +480,16 @@ class Classifier {
 	captureUserRequest(text: string): void {
 		if (text.length > 0 && !text.startsWith(FEEDBACK_PREFIX)) {
 			this.userRequest = text;
+			this.tldrFailed = false;
 		}
+	}
+
+	private applyTldrLimit(violations: Violation[]): Violation[] {
+		const kept = limitTldr(violations, this.tldrFailed);
+		if (kept.some((v) => v.reason === TLDR_MESSAGE)) {
+			this.tldrFailed = true;
+		}
+		return kept;
 	}
 
 	async onToolCall(
