@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.1.1...pi-auto-classifier-v1.2.0) (2026-08-11)
+
+
+### Features
+
+* let a rule cap itself at one failure per turn ([#34](https://github.com/marcoskichel/pi-auto-classifier/issues/34)) ([1102fac](https://github.com/marcoskichel/pi-auto-classifier/commit/1102fac16818d8f31999d4557eb836cede2dfdb2))
+
+
+### Bug Fixes
+
+* match blocked rules by heading in the override check ([#33](https://github.com/marcoskichel/pi-auto-classifier/issues/33)) ([26243ca](https://github.com/marcoskichel/pi-auto-classifier/commit/26243caf952ddd788bbc2835d5a0c0dfd9b129cc))
+* run pi with --extension instead of rewriting settings.json ([#35](https://github.com/marcoskichel/pi-auto-classifier/issues/35)) ([1951155](https://github.com/marcoskichel/pi-auto-classifier/commit/1951155bab5ea3d14e94e54024b72a4f46f8f051))
+
 ## [1.1.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.1.0...pi-auto-classifier-v1.1.1) (2026-08-07)
 
 
