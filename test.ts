@@ -6,7 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import autoClassifier from "./index.ts";
+import autoClassifier, { applyOnceRules, parseRule } from "./index.ts";
 
 function runNoComments(source: string): { code: number; output: string } {
 	const file = path.join(
@@ -183,4 +183,59 @@ test("tool_call fails open and counts project tool rules", async () => {
 		ctx,
 	);
 	assert.equal(blocked, undefined);
+});
+
+test("parseRule reads the once key and strips the frontmatter", () => {
+	assert.deepEqual(
+		parseRule("tldr.md", "---\nonce: be shorter\n---\n\n# TLDR\nbody"),
+		{
+			name: "tldr.md",
+			text: "# TLDR\nbody",
+			once: "be shorter",
+		},
+	);
+	assert.deepEqual(parseRule("ste.md", "# STE\nbody\n"), {
+		name: "ste.md",
+		text: "# STE\nbody",
+	});
+	assert.deepEqual(
+		parseRule("x.md", "---\nfoo: bar\n---\n# X").once,
+		undefined,
+	);
+});
+
+test("a once rule fails one time per turn and carries its own message", () => {
+	const rules = [
+		parseRule("tldr.md", "---\nonce: be shorter\n---\n\n# TLDR"),
+		parseRule("ste.md", "# ASD-STE100 Simplified Technical English"),
+	];
+	const violations = [
+		{ rule: "TLDR", reason: "rambling" },
+		{ rule: "ASD-STE100 Simplified Technical English", reason: "passive" },
+		{ rule: "tldr.md", reason: "still rambling" },
+	];
+	assert.deepEqual(applyOnceRules(rules, violations, []), {
+		violations: [
+			{ rule: "TLDR", reason: "be shorter" },
+			{ rule: "ASD-STE100 Simplified Technical English", reason: "passive" },
+		],
+		spent: ["tldr.md"],
+	});
+	assert.deepEqual(applyOnceRules(rules, violations, ["tldr.md"]), {
+		violations: [
+			{ rule: "ASD-STE100 Simplified Technical English", reason: "passive" },
+		],
+		spent: ["tldr.md"],
+	});
+});
+
+test("a once rule with no message keeps the judge reason", () => {
+	const rules = [parseRule("brevity.md", "---\nonce:\n---\n# Brevity")];
+	assert.deepEqual(
+		applyOnceRules(rules, [{ rule: "brevity.md", reason: "too long" }], []),
+		{
+			violations: [{ rule: "brevity.md", reason: "too long" }],
+			spent: ["brevity.md"],
+		},
+	);
 });

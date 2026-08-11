@@ -32,6 +32,8 @@ const GLOBAL_RULES_DIR = path.join(
 const MAX_TOOL_INPUT_CHARS = 4000;
 const MAX_USER_REQUEST_CHARS = 2000;
 const FEEDBACK_PREFIX = "Your draft reply below was withheld";
+const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
+const ONCE_KEY = /^once:[ \t]*(.*)$/m;
 const WITHHELD_PREFIX = "(withheld by classifier";
 const TOOL_PROMPT_HEADER = [
 	"You are a strict policy checker for an AI coding assistant's tool calls.",
@@ -42,7 +44,7 @@ const TOOL_PROMPT_HEADER = [
 const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
 
-type Rule = { name: string; text: string };
+type Rule = { name: string; text: string; once?: string };
 type Violation = { rule: string; reason: string };
 type Verdict = {
 	pass: boolean;
@@ -86,10 +88,19 @@ function readRulesFromDir(dir: string): Rule[] {
 		.readdirSync(dir)
 		.filter((file) => file.endsWith(".md"))
 		.sort((a, b) => a.localeCompare(b))
-		.map((file) => ({
-			name: file,
-			text: fs.readFileSync(path.join(dir, file), "utf8").trim(),
-		}));
+		.map((file) =>
+			parseRule(file, fs.readFileSync(path.join(dir, file), "utf8")),
+		);
+}
+
+export function parseRule(name: string, raw: string): Rule {
+	const front = raw.match(FRONTMATTER);
+	if (!front) {
+		return { name, text: raw.trim() };
+	}
+	const text = raw.slice(front[0].length).trim();
+	const once = front[1].match(ONCE_KEY);
+	return once ? { name, text, once: once[1].trim() } : { name, text };
 }
 
 function loadRules(cwd: string): Rule[] {
@@ -148,7 +159,8 @@ function buildClassifierPrompt(rules: Rule[], reply: string): string {
 		reply,
 		"</reply>",
 		"",
-		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<rule heading>", "reason": "short reason"}, ...]}',
+		'Copy each "rule" value verbatim from its ### heading above. Never invent a name.',
+		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<### heading>", "reason": "short reason"}, ...]}',
 	].join("\n");
 }
 
@@ -298,6 +310,51 @@ async function requestVerdict(
 	return verdict;
 }
 
+function normalizeName(text: string): string {
+	return text.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function ruleAliases(rule: Rule): string[] {
+	return [rule.name.replace(/\.md$/, ""), rule.text.match(/^#\s+(.+)$/m)?.[1]]
+		.map((alias) => normalizeName(alias ?? ""))
+		.filter((alias) => alias.length > 0);
+}
+
+function rulesViolation(violation: Violation, rule: Rule): boolean {
+	const reported = normalizeName(violation.rule);
+	return (
+		reported.length > 0 &&
+		ruleAliases(rule).some(
+			(alias) => reported.includes(alias) || alias.includes(reported),
+		)
+	);
+}
+
+export function applyOnceRules(
+	rules: Rule[],
+	violations: Violation[],
+	spent: string[],
+): { violations: Violation[]; spent: string[] } {
+	const capped = rules.filter((rule) => rule.once !== undefined);
+	const used = new Set(spent);
+	const kept: Violation[] = [];
+	for (const violation of violations) {
+		const rule = capped.find((candidate) =>
+			rulesViolation(violation, candidate),
+		);
+		if (!rule) {
+			kept.push(violation);
+			continue;
+		}
+		if (used.has(rule.name)) {
+			continue;
+		}
+		used.add(rule.name);
+		kept.push(rule.once ? { ...violation, reason: rule.once } : violation);
+	}
+	return { violations: kept, spent: [...used] };
+}
+
 function formatViolation(violation: Violation): string {
 	return `[${violation.rule}] ${violation.reason}`;
 }
@@ -353,6 +410,7 @@ class Classifier {
 	private rules: Rule[] = [];
 	private toolRules: Rule[] = [];
 	private userRequest = "";
+	private spent: string[] = [];
 	private modelSpec = DEFAULT_MODEL_SPEC;
 	private isEnabled = true;
 	private readonly pi: ExtensionAPI;
@@ -400,8 +458,15 @@ class Classifier {
 			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
 			return undefined;
 		}
-		this.requestRewrite(ctx, reply, verdict.violations);
-		return { message: withheldPlaceholder(event.message, verdict.violations) };
+		const limited = applyOnceRules(this.rules, verdict.violations, this.spent);
+		const violations = limited.violations;
+		if (violations.length === 0) {
+			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
+			return undefined;
+		}
+		this.spent = limited.spent;
+		this.requestRewrite(ctx, reply, violations);
+		return { message: withheldPlaceholder(event.message, violations) };
 	}
 
 	private async classifyToolCall(
@@ -462,7 +527,11 @@ class Classifier {
 	}
 
 	captureUserRequest(text: string): void {
-		if (text.length > 0 && !text.startsWith(FEEDBACK_PREFIX)) {
+		if (text.startsWith(FEEDBACK_PREFIX)) {
+			return;
+		}
+		this.spent = [];
+		if (text.length > 0) {
 			this.userRequest = text;
 		}
 	}

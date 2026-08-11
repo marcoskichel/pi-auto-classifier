@@ -2,7 +2,7 @@
 
 A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules, and every tool call against markdown tool rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. It keeps asking for rewrites until the reply passes. Classifier errors fail open.
 
-Ships with one rule: [ASD-STE100 Simplified Technical English + TLDR](rules/ste-tldr.md) — active voice, short sentences, answer first, no filler.
+Ships with two rules: [ASD-STE100 Simplified Technical English](rules/ste.md) — active voice, short sentences — and [TLDR](rules/tldr.md) — answer first, no filler.
 
 ## Install
 
@@ -34,6 +34,21 @@ Rules are markdown files — plain prose the classifier model can judge against.
 | `<project>/.pi/output-rules/` | output rules, per project |
 | `~/.pi/agent/tool-rules/` | tool rules, all projects |
 | `<project>/.pi/tool-rules/` | tool rules, per project |
+
+### A rule that fails only once
+
+Some rules are a matter of degree, so the model and the judge can disagree forever. Optional YAML frontmatter caps a rule at one failure per user turn:
+
+```markdown
+---
+once: Make your reply much shorter, like a TLDR, remove trivia and all unnecessary details
+---
+
+# TLDR
+...
+```
+
+The first violation asks for a rewrite and sends the `once` text as the reason, instead of whatever the judge wrote. Later violations of that rule are dropped for the rest of the turn, so the reply ships when no other rule fails. The next user message re-arms the rule. Write `once:` with no text to cap the rule but keep the judge's own reason. The bundled TLDR rule uses this; the STE rule does not.
 
 ## Tool rules
 
