@@ -187,18 +187,27 @@ test("tool_call fails open and counts project tool rules", async () => {
 
 test("tldr violations carry the fixed message and fail only once", () => {
 	const violations = [
-		{ rule: "ste-tldr.md", reason: "rambling" },
-		{ rule: "other.md", reason: "keep me" },
+		{ rule: "tldr.md", reason: "rambling" },
+		{ rule: "ste.md", reason: "keep me" },
+		{ rule: "tldr.md", reason: "also rambling" },
 	];
-	assert.deepEqual(limitTldr(violations, false), [
-		{
-			rule: "ste-tldr.md",
-			reason:
-				"Make your reply much shorter, like a TLDR, remove trivia and all unnecessary details",
-		},
-		{ rule: "other.md", reason: "keep me" },
-	]);
-	assert.deepEqual(limitTldr(violations, true), [
-		{ rule: "other.md", reason: "keep me" },
-	]);
+	assert.deepEqual(limitTldr(violations, false), {
+		violations: [
+			{
+				rule: "tldr.md",
+				reason:
+					"Make your reply much shorter, like a TLDR, remove trivia and all unnecessary details",
+			},
+			{ rule: "ste.md", reason: "keep me" },
+		],
+		tldrFailed: true,
+	});
+	assert.deepEqual(limitTldr(violations, true), {
+		violations: [{ rule: "ste.md", reason: "keep me" }],
+		tldrFailed: true,
+	});
+	assert.deepEqual(limitTldr([{ rule: "ste.md", reason: "passive" }], false), {
+		violations: [{ rule: "ste.md", reason: "passive" }],
+		tldrFailed: false,
+	});
 });

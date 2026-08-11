@@ -151,7 +151,8 @@ function buildClassifierPrompt(rules: Rule[], reply: string): string {
 		reply,
 		"</reply>",
 		"",
-		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<rule heading>", "reason": "short reason"}, ...]}',
+		'Copy each "rule" value verbatim from its ### heading above. Never invent a name.',
+		'Respond with ONLY this JSON, nothing else: {"pass": true|false, "violations": [{"rule": "<### heading>", "reason": "short reason"}, ...]}',
 	].join("\n");
 }
 
@@ -304,12 +305,17 @@ async function requestVerdict(
 export function limitTldr(
 	violations: Violation[],
 	alreadyFailed: boolean,
-): Violation[] {
+): { violations: Violation[]; tldrFailed: boolean } {
 	const isTldr = (v: Violation) =>
 		v.rule.toLowerCase().includes(TLDR_RULE_MATCH);
-	return violations
-		.filter((v) => !isTldr(v) || !alreadyFailed)
-		.map((v) => (isTldr(v) ? { ...v, reason: TLDR_MESSAGE } : v));
+	const firstTldr = alreadyFailed ? -1 : violations.findIndex(isTldr);
+	const kept = violations.filter((v, i) => !isTldr(v) || i === firstTldr);
+	return {
+		violations: kept.map((v) =>
+			isTldr(v) ? { ...v, reason: TLDR_MESSAGE } : v,
+		),
+		tldrFailed: alreadyFailed || firstTldr >= 0,
+	};
 }
 
 function formatViolation(violation: Violation): string {
@@ -411,11 +417,17 @@ class Classifier {
 		if (!verdict) {
 			return undefined;
 		}
-		const violations = this.applyTldrLimit(verdict.violations);
-		if (verdict.pass || violations.length === 0) {
+		if (verdict.pass) {
 			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
 			return undefined;
 		}
+		const limited = limitTldr(verdict.violations, this.tldrFailed);
+		const violations = limited.violations;
+		if (violations.length === 0) {
+			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713`);
+			return undefined;
+		}
+		this.tldrFailed = limited.tldrFailed;
 		this.requestRewrite(ctx, reply, violations);
 		return { message: withheldPlaceholder(event.message, violations) };
 	}
@@ -478,18 +490,13 @@ class Classifier {
 	}
 
 	captureUserRequest(text: string): void {
-		if (text.length > 0 && !text.startsWith(FEEDBACK_PREFIX)) {
+		if (text.startsWith(FEEDBACK_PREFIX)) {
+			return;
+		}
+		this.tldrFailed = false;
+		if (text.length > 0) {
 			this.userRequest = text;
-			this.tldrFailed = false;
 		}
-	}
-
-	private applyTldrLimit(violations: Violation[]): Violation[] {
-		const kept = limitTldr(violations, this.tldrFailed);
-		if (kept.some((v) => v.reason === TLDR_MESSAGE)) {
-			this.tldrFailed = true;
-		}
-		return kept;
 	}
 
 	async onToolCall(
