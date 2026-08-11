@@ -1,3 +1,7 @@
+---
+once: Make your reply much shorter, like a TLDR, remove trivia and all unnecessary details
+---
+
 # TLDR
 
 The reply must follow these rules.

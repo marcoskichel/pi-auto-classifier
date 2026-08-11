@@ -6,7 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import autoClassifier, { limitTldr } from "./index.ts";
+import autoClassifier, { applyOnceRules, parseRule } from "./index.ts";
 
 function runNoComments(source: string): { code: number; output: string } {
 	const file = path.join(
@@ -185,29 +185,57 @@ test("tool_call fails open and counts project tool rules", async () => {
 	assert.equal(blocked, undefined);
 });
 
-test("tldr violations carry the fixed message and fail only once", () => {
-	const violations = [
-		{ rule: "tldr.md", reason: "rambling" },
-		{ rule: "ste.md", reason: "keep me" },
-		{ rule: "tldr.md", reason: "also rambling" },
+test("parseRule reads the once key and strips the frontmatter", () => {
+	assert.deepEqual(
+		parseRule("tldr.md", "---\nonce: be shorter\n---\n\n# TLDR\nbody"),
+		{
+			name: "tldr.md",
+			text: "# TLDR\nbody",
+			once: "be shorter",
+		},
+	);
+	assert.deepEqual(parseRule("ste.md", "# STE\nbody\n"), {
+		name: "ste.md",
+		text: "# STE\nbody",
+	});
+	assert.deepEqual(
+		parseRule("x.md", "---\nfoo: bar\n---\n# X").once,
+		undefined,
+	);
+});
+
+test("a once rule fails one time per turn and carries its own message", () => {
+	const rules = [
+		parseRule("tldr.md", "---\nonce: be shorter\n---\n\n# TLDR"),
+		parseRule("ste.md", "# ASD-STE100 Simplified Technical English"),
 	];
-	assert.deepEqual(limitTldr(violations, false), {
+	const violations = [
+		{ rule: "TLDR", reason: "rambling" },
+		{ rule: "ASD-STE100 Simplified Technical English", reason: "passive" },
+		{ rule: "tldr.md", reason: "still rambling" },
+	];
+	assert.deepEqual(applyOnceRules(rules, violations, []), {
 		violations: [
-			{
-				rule: "tldr.md",
-				reason:
-					"Make your reply much shorter, like a TLDR, remove trivia and all unnecessary details",
-			},
-			{ rule: "ste.md", reason: "keep me" },
+			{ rule: "TLDR", reason: "be shorter" },
+			{ rule: "ASD-STE100 Simplified Technical English", reason: "passive" },
 		],
-		tldrFailed: true,
+		spent: ["tldr.md"],
 	});
-	assert.deepEqual(limitTldr(violations, true), {
-		violations: [{ rule: "ste.md", reason: "keep me" }],
-		tldrFailed: true,
+	assert.deepEqual(applyOnceRules(rules, violations, ["tldr.md"]), {
+		violations: [
+			{ rule: "ASD-STE100 Simplified Technical English", reason: "passive" },
+		],
+		spent: ["tldr.md"],
 	});
-	assert.deepEqual(limitTldr([{ rule: "ste.md", reason: "passive" }], false), {
-		violations: [{ rule: "ste.md", reason: "passive" }],
-		tldrFailed: false,
-	});
+});
+
+test("a once rule with no message keeps the judge reason", () => {
+	const rules = [parseRule("brevity.md", "---\nonce:\n---\n# Brevity")];
+	assert.deepEqual(
+		applyOnceRules(rules, [{ rule: "brevity.md", reason: "too long" }], []),
+		{
+			violations: [{ rule: "brevity.md", reason: "too long" }],
+			spent: ["brevity.md"],
+		},
+	);
 });
