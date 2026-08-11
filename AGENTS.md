@@ -8,7 +8,7 @@ live subagent test is the only proof.
 
 - `npm run check` — types, lint, comment check.
 - `npm test` — unit tests.
-- `npm run dev` — load this checkout in pi. `npm run dev -- --off` restores.
+- `npm run dev` — run pi with this checkout loaded. Never edits settings.json.
 
 ## Rules
 
