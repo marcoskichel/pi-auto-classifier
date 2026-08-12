@@ -59,15 +59,45 @@ function setup() {
 
 	let status = "";
 	const notices: string[] = [];
-	const picks: (string | undefined)[] = [];
-	let menuOptions: string[] = [];
+	const keys: string[] = [];
+	let menuLines: string[] = [];
 	const ctx = {
 		cwd: process.cwd(),
 		hasUI: true,
+		mode: "tui",
 		ui: {
-			select: async (_title: string, options: string[]) => {
-				menuOptions = options;
-				return picks.shift();
+			custom: async (
+				factory: (
+					tui: unknown,
+					theme: unknown,
+					kb: unknown,
+					done: () => void,
+				) => {
+					render: (width: number) => string[];
+					handleInput: (data: string) => void;
+				},
+			) => {
+				let open = true;
+				const theme = {
+					fg: (_color: string, text: string) => text,
+					bold: (text: string) => text,
+				};
+				const component = factory(
+					{ requestRender: () => {} },
+					theme,
+					{},
+					() => {
+						open = false;
+					},
+				);
+				menuLines = component.render(80);
+				for (const key of keys.splice(0)) {
+					if (!open) {
+						break;
+					}
+					component.handleInput(key);
+					menuLines = component.render(80);
+				}
 			},
 			setStatus: (_key: string, text: string) => {
 				status = text;
@@ -90,9 +120,9 @@ function setup() {
 		renderers,
 		ctx,
 		notices,
-		picks,
+		keys,
 		badge: () => status,
-		menu: () => menuOptions,
+		menu: () => menuLines,
 	};
 }
 
@@ -125,20 +155,26 @@ test("session_start shows classifier state in the status bar", async () => {
 test("menu toggles the classifier off", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
-	app.picks.push("\u25CF classifier (all rules)", undefined);
+	app.keys.push("\r", "\u001b");
 	await app.commands.classifier.handler([], app.ctx);
 	assert.match(app.badge(), /classifier off/);
 });
 
-test("menu toggles a single rule off and back on", async () => {
+test("menu toggles a single rule and keeps the cursor in place", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
 	const total = Number(app.badge().match(/classifier \((\d+)\)/)?.[1]);
-	app.picks.push(`\u25CF ste-tldr.md`, undefined);
+	app.keys.push("\u001b[B", "\r");
 	await app.commands.classifier.handler([], app.ctx);
 	assert.match(app.badge(), new RegExp(`classifier \\(${total - 1}\\)`));
-	assert.ok(app.menu().includes("\u25CB ste-tldr.md"));
-	app.picks.push(`\u25CB ste-tldr.md`, undefined);
+	assert.ok(app.menu().some((line) => line.startsWith("> \u25CB ")));
+});
+
+test("menu toggles a rule back on", async () => {
+	const app = setup();
+	await app.handlers.session_start({}, app.ctx);
+	const total = Number(app.badge().match(/classifier \((\d+)\)/)?.[1]);
+	app.keys.push("\u001b[B", "\r", "\r", "\u001b");
 	await app.commands.classifier.handler([], app.ctx);
 	assert.match(app.badge(), new RegExp(`classifier \\(${total}\\)`));
 });

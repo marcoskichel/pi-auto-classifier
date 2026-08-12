@@ -56,6 +56,10 @@ type Verdict = {
 };
 type ClassifierConfig = { model?: string };
 type WithheldEntry = { violations: Violation[] };
+type MenuTheme = {
+	fg(color: "accent" | "text" | "dim", text: string): string;
+	bold(text: string): string;
+};
 type TextBlock = { type: "text"; text: string };
 type DraftMessage = { role?: string; content?: unknown };
 type EndedMessage = DraftMessage & { stopReason?: string };
@@ -606,35 +610,75 @@ class Classifier {
 		}
 	}
 
+	menuRows(): string[] {
+		return [
+			`${this.isEnabled ? ENABLED_MARK : DISABLED_MARK} classifier (all rules)`,
+			...[...this.rules, ...this.toolRules].map(
+				(rule) =>
+					`${this.disabledRules.has(rule.name) ? DISABLED_MARK : ENABLED_MARK} ${rule.name}`,
+			),
+		];
+	}
+
+	toggleRow(index: number, ctx: ExtensionContext): void {
+		if (index === 0) {
+			this.isEnabled = !this.isEnabled;
+		} else {
+			const rule = [...this.rules, ...this.toolRules][index - 1];
+			if (rule && !this.disabledRules.delete(rule.name)) {
+				this.disabledRules.add(rule.name);
+			}
+		}
+		this.showIdleStatus(ctx);
+	}
+
 	async openMenu(ctx: ExtensionContext): Promise<void> {
-		if (!ctx.hasUI) {
+		if (ctx.mode !== "tui") {
 			this.toggle(ctx);
 			return;
 		}
-		const all = [...this.rules, ...this.toolRules];
-		for (;;) {
-			const master = `${this.isEnabled ? ENABLED_MARK : DISABLED_MARK} classifier (all rules)`;
-			const options = [
-				master,
-				...all.map(
-					(rule) =>
-						`${this.disabledRules.has(rule.name) ? DISABLED_MARK : ENABLED_MARK} ${rule.name}`,
-				),
-			];
-			const choice = await ctx.ui.select("Toggle classifier rules", options);
-			if (choice === undefined) {
-				return;
-			}
-			if (choice === master) {
-				this.isEnabled = !this.isEnabled;
-			} else {
-				const name = choice.slice(2);
-				if (!this.disabledRules.delete(name)) {
-					this.disabledRules.add(name);
+		await ctx.ui.custom<void>((tui, theme, _keybindings, done) =>
+			this.menuComponent(ctx, tui, theme, done),
+		);
+	}
+
+	private menuComponent(
+		ctx: ExtensionContext,
+		tui: { requestRender(): void },
+		theme: MenuTheme,
+		done: () => void,
+	) {
+		let cursor = 0;
+		return {
+			render: () => {
+				const rows = this.menuRows();
+				cursor = Math.min(cursor, rows.length - 1);
+				return [
+					theme.fg("accent", theme.bold("Classifier rules")),
+					...rows.map((row, i) =>
+						i === cursor
+							? theme.fg("accent", `> ${row}`)
+							: theme.fg("text", `  ${row}`),
+					),
+					theme.fg("dim", "↑↓ move • enter toggle • esc close"),
+				];
+			},
+			handleInput: (data: string) => {
+				const rows = this.menuRows().length;
+				if (data === "\u001b[A") {
+					cursor = (cursor - 1 + rows) % rows;
+				} else if (data === "\u001b[B") {
+					cursor = (cursor + 1) % rows;
+				} else if (data === "\r" || data === "\n" || data === " ") {
+					this.toggleRow(cursor, ctx);
+				} else if (data === "\u001b" || data === "\u0003") {
+					done();
+					return;
 				}
-			}
-			this.showIdleStatus(ctx);
-		}
+				tui.requestRender();
+			},
+			invalidate: () => {},
+		};
 	}
 
 	private replyToCheck(message: EndedMessage): string | undefined {
