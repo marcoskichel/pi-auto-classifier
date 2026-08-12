@@ -59,10 +59,46 @@ function setup() {
 
 	let status = "";
 	const notices: string[] = [];
+	const keys: string[] = [];
+	let menuLines: string[] = [];
 	const ctx = {
 		cwd: process.cwd(),
 		hasUI: true,
+		mode: "tui",
 		ui: {
+			custom: async (
+				factory: (
+					tui: unknown,
+					theme: unknown,
+					kb: unknown,
+					done: () => void,
+				) => {
+					render: (width: number) => string[];
+					handleInput: (data: string) => void;
+				},
+			) => {
+				let open = true;
+				const theme = {
+					fg: (_color: string, text: string) => text,
+					bold: (text: string) => text,
+				};
+				const component = factory(
+					{ requestRender: () => {} },
+					theme,
+					{},
+					() => {
+						open = false;
+					},
+				);
+				menuLines = component.render(80);
+				for (const key of keys.splice(0)) {
+					if (!open) {
+						break;
+					}
+					component.handleInput(key);
+					menuLines = component.render(80);
+				}
+			},
 			setStatus: (_key: string, text: string) => {
 				status = text;
 			},
@@ -84,7 +120,9 @@ function setup() {
 		renderers,
 		ctx,
 		notices,
+		keys,
 		badge: () => status,
+		menu: () => menuLines,
 	};
 }
 
@@ -114,12 +152,37 @@ test("session_start shows classifier state in the status bar", async () => {
 	assert.match(app.badge(), /classifier \(\d+\)/);
 });
 
-test("toggle flips the badge and notifies", async () => {
+test("the top row marks every rule off, then restores them", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
+	app.keys.push("\u001b[B", "\r", "\u001b[A", "\r");
 	await app.commands.classifier.handler([], app.ctx);
 	assert.match(app.badge(), /classifier off/);
-	assert.deepEqual(app.notices, ["Auto classifier disabled"]);
+	assert.ok(app.menu().every((line) => !line.includes("\u25CF")));
+	app.keys.push("\r", "\u001b");
+	await app.commands.classifier.handler([], app.ctx);
+	const rows = app.menu();
+	assert.ok(rows.some((line) => line.includes("\u25CB ")));
+	assert.ok(rows.some((line) => line.includes("\u25CF ")));
+});
+
+test("menu toggles a single rule and keeps the cursor in place", async () => {
+	const app = setup();
+	await app.handlers.session_start({}, app.ctx);
+	const total = Number(app.badge().match(/classifier \((\d+)\)/)?.[1]);
+	app.keys.push("\u001b[B", "\r");
+	await app.commands.classifier.handler([], app.ctx);
+	assert.match(app.badge(), new RegExp(`classifier \\(${total - 1}\\)`));
+	assert.ok(app.menu().some((line) => line.startsWith("> \u25CB ")));
+});
+
+test("menu toggles a rule back on", async () => {
+	const app = setup();
+	await app.handlers.session_start({}, app.ctx);
+	const total = Number(app.badge().match(/classifier \((\d+)\)/)?.[1]);
+	app.keys.push("\u001b[B", "\r", "\r", "\u001b");
+	await app.commands.classifier.handler([], app.ctx);
+	assert.match(app.badge(), new RegExp(`classifier \\(${total}\\)`));
 });
 
 test("message_start blanks assistant draft text", async () => {

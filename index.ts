@@ -56,6 +56,10 @@ type Verdict = {
 };
 type ClassifierConfig = { model?: string };
 type WithheldEntry = { violations: Violation[] };
+type MenuTheme = {
+	fg(color: "accent" | "text" | "dim", text: string): string;
+	bold(text: string): string;
+};
 type TextBlock = { type: "text"; text: string };
 type DraftMessage = { role?: string; content?: unknown };
 type EndedMessage = DraftMessage & { stopReason?: string };
@@ -435,6 +439,7 @@ function isFinalAssistantReply(message: EndedMessage): boolean {
 class Classifier {
 	private rules: Rule[] = [];
 	private toolRules: Rule[] = [];
+	private readonly disabledRules = new Set<string>();
 	private userRequest = "";
 	private spent: string[] = [];
 	private modelSpec = DEFAULT_MODEL_SPEC;
@@ -454,10 +459,14 @@ class Classifier {
 		}
 	}
 
+	private activeRules(rules: Rule[]): Rule[] {
+		return rules.filter((rule) => !this.disabledRules.has(rule.name));
+	}
+
 	hideDraft(message: DraftMessage): void {
 		if (
 			this.isEnabled &&
-			this.rules.length > 0 &&
+			this.activeRules(this.rules).length > 0 &&
 			message.role === "assistant"
 		) {
 			maskDraftText(message);
@@ -503,7 +512,7 @@ class Classifier {
 		try {
 			debugLog(
 				buildToolPrompt(
-					this.toolRules,
+					this.activeRules(this.toolRules),
 					event.toolName,
 					event.input,
 					this.userRequest,
@@ -513,7 +522,7 @@ class Classifier {
 				ctx,
 				this.modelSpec,
 				buildToolPrompt(
-					this.toolRules,
+					this.activeRules(this.toolRules),
 					event.toolName,
 					event.input,
 					this.userRequest,
@@ -539,7 +548,7 @@ class Classifier {
 				ctx,
 				this.modelSpec,
 				buildOverridePrompt(
-					this.toolRules,
+					this.activeRules(this.toolRules),
 					violations,
 					event.toolName,
 					event.input,
@@ -567,7 +576,7 @@ class Classifier {
 		event: { toolName: string; input: unknown },
 		ctx: ExtensionContext,
 	): Promise<{ block: true; reason: string } | undefined> {
-		if (!this.isEnabled || this.toolRules.length === 0) {
+		if (!this.isEnabled || this.activeRules(this.toolRules).length === 0) {
 			return undefined;
 		}
 		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
@@ -601,10 +610,81 @@ class Classifier {
 		}
 	}
 
+	menuRows(): string[] {
+		return [
+			`${this.isEnabled ? ENABLED_MARK : DISABLED_MARK} classifier (all rules)`,
+			...[...this.rules, ...this.toolRules].map(
+				(rule) =>
+					`${this.isEnabled && !this.disabledRules.has(rule.name) ? ENABLED_MARK : DISABLED_MARK} ${rule.name}`,
+			),
+		];
+	}
+
+	toggleRow(index: number, ctx: ExtensionContext): void {
+		if (index === 0) {
+			this.isEnabled = !this.isEnabled;
+		} else {
+			const rule = [...this.rules, ...this.toolRules][index - 1];
+			if (rule && !this.disabledRules.delete(rule.name)) {
+				this.disabledRules.add(rule.name);
+			}
+		}
+		this.showIdleStatus(ctx);
+	}
+
+	async openMenu(ctx: ExtensionContext): Promise<void> {
+		if (ctx.mode !== "tui") {
+			this.toggle(ctx);
+			return;
+		}
+		await ctx.ui.custom<void>((tui, theme, _keybindings, done) =>
+			this.menuComponent(ctx, tui, theme, done),
+		);
+	}
+
+	private menuComponent(
+		ctx: ExtensionContext,
+		tui: { requestRender(): void },
+		theme: MenuTheme,
+		done: () => void,
+	) {
+		let cursor = 0;
+		return {
+			render: () => {
+				const rows = this.menuRows();
+				cursor = Math.min(cursor, rows.length - 1);
+				return [
+					theme.fg("accent", theme.bold("Classifier rules")),
+					...rows.map((row, i) =>
+						i === cursor
+							? theme.fg("accent", `> ${row}`)
+							: theme.fg("text", `  ${row}`),
+					),
+					theme.fg("dim", "↑↓ move • enter toggle • esc close"),
+				];
+			},
+			handleInput: (data: string) => {
+				const rows = this.menuRows().length;
+				if (data === "\u001b[A") {
+					cursor = (cursor - 1 + rows) % rows;
+				} else if (data === "\u001b[B") {
+					cursor = (cursor + 1) % rows;
+				} else if (data === "\r" || data === "\n" || data === " ") {
+					this.toggleRow(cursor, ctx);
+				} else if (data === "\u001b" || data === "\u0003") {
+					done();
+					return;
+				}
+				tui.requestRender();
+			},
+			invalidate: () => {},
+		};
+	}
+
 	private replyToCheck(message: EndedMessage): string | undefined {
 		if (
 			!this.isEnabled ||
-			this.rules.length === 0 ||
+			this.activeRules(this.rules).length === 0 ||
 			!isFinalAssistantReply(message)
 		) {
 			return undefined;
@@ -625,7 +705,7 @@ class Classifier {
 			return await requestVerdict(
 				ctx,
 				this.modelSpec,
-				buildClassifierPrompt(this.rules, reply),
+				buildClassifierPrompt(this.activeRules(this.rules), reply),
 			);
 		} catch (error) {
 			debugLog(`classifier error: ${String(error)}`);
@@ -672,7 +752,7 @@ class Classifier {
 		this.setStatus(
 			ctx,
 			this.isEnabled
-				? `${ENABLED_MARK} classifier (${this.rules.length + this.toolRules.length})`
+				? `${ENABLED_MARK} classifier (${this.activeRules(this.rules).length + this.activeRules(this.toolRules).length})`
 				: `${DISABLED_MARK} classifier off`,
 		);
 	}
@@ -701,7 +781,7 @@ export default function autoClassifier(pi: ExtensionAPI) {
 	pi.on("tool_call", async (event, ctx) => classifier.onToolCall(event, ctx));
 	pi.registerCommand("classifier", {
 		description:
-			"Toggle the classifier (output rules in .pi/output-rules/, tool rules in .pi/tool-rules/) on or off",
-		handler: async (_args, ctx) => classifier.toggle(ctx),
+			"Toggle the classifier or individual rules (output rules in .pi/output-rules/, tool rules in .pi/tool-rules/)",
+		handler: async (_args, ctx) => classifier.openMenu(ctx),
 	});
 }
