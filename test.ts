@@ -8,6 +8,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import autoClassifier, {
 	applyOnceRules,
+	emptiedReply,
 	parseRule,
 	withheldLines,
 } from "./index.ts";
@@ -29,12 +30,18 @@ function runNoComments(source: string): { code: number; output: string } {
 
 type Handler = (event: never, ctx: never) => Promise<unknown>;
 type Call = (event: unknown, ctx: unknown) => Promise<unknown>;
+type Renderer = (
+	entry: unknown,
+	options: { expanded: boolean },
+	theme: unknown,
+) => { render: (width: number) => string[] };
 
 function setup() {
 	const handlers: Record<string, Handler> = {};
 	const commands: Record<string, { handler: Handler }> = {};
 	const sent: unknown[] = [];
 	const entries: { customType: string; data: unknown }[] = [];
+	const renderers: Record<string, Renderer> = {};
 	const pi = {
 		on: (name: string, fn: Handler) => {
 			handlers[name] = fn;
@@ -42,7 +49,9 @@ function setup() {
 		registerCommand: (name: string, spec: { handler: Handler }) => {
 			commands[name] = spec;
 		},
-		registerEntryRenderer: () => {},
+		registerEntryRenderer: (customType: string, fn: Renderer) => {
+			renderers[customType] = fn;
+		},
 		sendMessage: (message: unknown) => sent.push(message),
 		appendEntry: (customType: string, data: unknown) =>
 			entries.push({ customType, data }),
@@ -72,6 +81,7 @@ function setup() {
 		commands: commands as Record<string, { handler: Call }>,
 		sent,
 		entries,
+		renderers,
 		ctx,
 		notices,
 		badge: () => status,
@@ -146,10 +156,58 @@ test("message_end ignores replies below the length floor", async () => {
 test("message_end never re-classifies an emptied reply", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
+	const idle = app.badge();
 	const message = { role: "assistant", stopReason: "stop", content: [] };
 	assert.equal(await app.handlers.message_end({ message }, app.ctx), undefined);
 	assert.deepEqual(app.sent, []);
 	assert.deepEqual(app.entries, []);
+	assert.equal(app.badge(), idle);
+});
+
+test("emptiedReply drops the text and keeps the role", () => {
+	const message = {
+		role: "assistant",
+		stopReason: "stop",
+		content: [{ type: "text", text: "draft" }],
+	};
+	assert.deepEqual(emptiedReply(message), {
+		role: "assistant",
+		stopReason: "stop",
+		content: [],
+	});
+});
+
+test("the entry renderer draws what the classifier appends", () => {
+	const app = setup();
+	const violations = [{ rule: "ste.md", reason: "passive voice" }];
+	const renderer = app.renderers["auto-classifier-withheld"];
+	const theme = { fg: (_color: string, text: string) => text };
+	const draw = (data: unknown, expanded: boolean) =>
+		renderer({ data }, { expanded }, theme)
+			.render(120)
+			.map((line) => line.trim());
+	assert.deepEqual(draw({ violations }, true), [
+		"Withheld by classifier. rule: ste.md",
+		"passive voice",
+	]);
+	assert.deepEqual(draw(undefined, false), ["Withheld by classifier. rule:"]);
+});
+
+test("withheldLines drops the hint when no key is bound", () => {
+	assert.deepEqual(
+		withheldLines([{ rule: "ste.md", reason: "passive voice" }], false, ""),
+		["Withheld by classifier. rule: ste.md"],
+	);
+});
+
+test("withheldLines keeps a judge reason on one line", () => {
+	const violations = [
+		{ rule: "ste.md\nfake", reason: "passive\nvoice\u001b[31m" },
+	];
+	assert.deepEqual(withheldLines(violations, true, "ctrl+o"), [
+		"Withheld by classifier. rule: ste.md fake",
+		"  passive voice [31m",
+	]);
 });
 
 test("withheldLines collapses to one line and expands to the reasons", () => {

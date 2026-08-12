@@ -22,7 +22,7 @@ Or add a local checkout to `~/.pi/agent/settings.json`:
 
 - `/classifier` — toggle on/off
 - The status bar shows the current state
-- A withheld reply leaves one muted line in the chat: `Withheld by classifier. rule: <rule>`. Press `ctrl+o` to read the reasons.
+- A withheld reply leaves one muted line in the chat: `Withheld by classifier. rule: <rules>`. Press the expand key (`ctrl+o` by default) to read the reasons.
 
 ## Rules
 

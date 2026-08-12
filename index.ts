@@ -398,8 +398,16 @@ function maskDraftText(message: DraftMessage): void {
 	);
 }
 
-function withheldPlaceholder<T extends object>(message: T): T {
+export function emptiedReply<T extends object>(message: T): T {
 	return { ...message, content: [] } as T;
+}
+
+function oneLine(text: string): string {
+	return [...text]
+		.map((char) => (char < " " || char === "\u007f" ? " " : char))
+		.join("")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 export function withheldLines(
@@ -407,12 +415,17 @@ export function withheldLines(
 	expanded: boolean,
 	expandKey: string,
 ): string[] {
-	const rules = [...new Set(violations.map((violation) => violation.rule))];
+	const rules = [
+		...new Set(violations.map((violation) => oneLine(violation.rule))),
+	];
 	const head = `Withheld by classifier. rule: ${rules.join(", ")}`;
-	if (!expanded) {
-		return [`${head} (${expandKey} to expand)`];
+	if (expanded) {
+		return [
+			head,
+			...violations.map((violation) => `  ${oneLine(violation.reason)}`),
+		];
 	}
-	return [head, ...violations.map((violation) => `  ${violation.reason}`)];
+	return [expandKey ? `${head} (${expandKey} to expand)` : head];
 }
 
 function isFinalAssistantReply(message: EndedMessage): boolean {
@@ -479,8 +492,8 @@ class Classifier {
 		}
 		this.spent = limited.spent;
 		this.requestRewrite(ctx, reply, violations);
-		this.pi.appendEntry<WithheldEntry>(WITHHELD_ENTRY_TYPE, { violations });
-		return { message: withheldPlaceholder(event.message) };
+		this.announceWithheld(violations);
+		return { message: emptiedReply(event.message) };
 	}
 
 	private async classifyToolCall(
@@ -638,6 +651,14 @@ class Classifier {
 			);
 		} catch (error) {
 			debugLog(`rewrite skipped, session is shutting down: ${String(error)}`);
+		}
+	}
+
+	private announceWithheld(violations: Violation[]): void {
+		try {
+			this.pi.appendEntry<WithheldEntry>(WITHHELD_ENTRY_TYPE, { violations });
+		} catch (error) {
+			debugLog(`entry skipped, session is shutting down: ${String(error)}`);
 		}
 	}
 
