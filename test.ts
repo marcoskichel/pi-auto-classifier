@@ -6,7 +6,11 @@ import * as path from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import autoClassifier, { applyOnceRules, parseRule } from "./index.ts";
+import autoClassifier, {
+	applyOnceRules,
+	parseRule,
+	withheldLines,
+} from "./index.ts";
 
 function runNoComments(source: string): { code: number; output: string } {
 	const file = path.join(
@@ -30,6 +34,7 @@ function setup() {
 	const handlers: Record<string, Handler> = {};
 	const commands: Record<string, { handler: Handler }> = {};
 	const sent: unknown[] = [];
+	const entries: { customType: string; data: unknown }[] = [];
 	const pi = {
 		on: (name: string, fn: Handler) => {
 			handlers[name] = fn;
@@ -37,7 +42,10 @@ function setup() {
 		registerCommand: (name: string, spec: { handler: Handler }) => {
 			commands[name] = spec;
 		},
+		registerEntryRenderer: () => {},
 		sendMessage: (message: unknown) => sent.push(message),
+		appendEntry: (customType: string, data: unknown) =>
+			entries.push({ customType, data }),
 	};
 
 	let status = "";
@@ -63,6 +71,7 @@ function setup() {
 		handlers: handlers as Record<string, Call>,
 		commands: commands as Record<string, { handler: Call }>,
 		sent,
+		entries,
 		ctx,
 		notices,
 		badge: () => status,
@@ -134,21 +143,38 @@ test("message_end ignores replies below the length floor", async () => {
 	assert.deepEqual(app.sent, []);
 });
 
-test("message_end never re-classifies its own withheld placeholder", async () => {
+test("message_end never re-classifies an emptied reply", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
-	const message = {
-		role: "assistant",
-		stopReason: "stop",
-		content: [
-			{
-				type: "text",
-				text: "(withheld by classifier, rewriting: empty reply with no answer)",
-			},
-		],
-	};
+	const message = { role: "assistant", stopReason: "stop", content: [] };
 	assert.equal(await app.handlers.message_end({ message }, app.ctx), undefined);
 	assert.deepEqual(app.sent, []);
+	assert.deepEqual(app.entries, []);
+});
+
+test("withheldLines collapses to one line and expands to the reasons", () => {
+	const violations = [
+		{ rule: "tldr.md", reason: "buried answer" },
+		{ rule: "ste.md", reason: "passive voice" },
+	];
+	assert.deepEqual(withheldLines(violations, false, "ctrl+o"), [
+		"Withheld by classifier. rule: tldr.md, ste.md (ctrl+o to expand)",
+	]);
+	assert.deepEqual(withheldLines(violations, true, "ctrl+o"), [
+		"Withheld by classifier. rule: tldr.md, ste.md",
+		"  buried answer",
+		"  passive voice",
+	]);
+});
+
+test("withheldLines lists each rule once", () => {
+	const violations = [
+		{ rule: "ste.md", reason: "passive voice" },
+		{ rule: "ste.md", reason: "long sentence" },
+	];
+	assert.deepEqual(withheldLines(violations, false, "ctrl+o"), [
+		"Withheld by classifier. rule: ste.md (ctrl+o to expand)",
+	]);
 });
 
 test("message_end passes the reply through when no model is configured", async () => {

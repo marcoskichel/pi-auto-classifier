@@ -8,7 +8,9 @@ import {
 	CONFIG_DIR_NAME,
 	type ExtensionAPI,
 	type ExtensionContext,
+	keyText,
 } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 
 const DEFAULT_MODEL_SPEC = "anthropic/claude-haiku-4-5";
 const CONFIG_FILE_NAME = "auto-classifier.json";
@@ -34,7 +36,8 @@ const MAX_USER_REQUEST_CHARS = 2000;
 const FEEDBACK_PREFIX = "Your draft reply below was withheld";
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 const ONCE_KEY = /^once:[ \t]*(.*)$/m;
-const WITHHELD_PREFIX = "(withheld by classifier";
+const WITHHELD_ENTRY_TYPE = "auto-classifier-withheld";
+const EXPAND_KEY = "app.tools.expand";
 const TOOL_PROMPT_HEADER = [
 	"You are a strict policy checker for an AI coding assistant's tool calls.",
 	"Judge the tool call below against the rules. Fail it only when a rule clearly forbids it.",
@@ -52,6 +55,7 @@ type Verdict = {
 	userAsked?: boolean;
 };
 type ClassifierConfig = { model?: string };
+type WithheldEntry = { violations: Violation[] };
 type TextBlock = { type: "text"; text: string };
 type DraftMessage = { role?: string; content?: unknown };
 type EndedMessage = DraftMessage & { stopReason?: string };
@@ -394,20 +398,21 @@ function maskDraftText(message: DraftMessage): void {
 	);
 }
 
-function withheldPlaceholder<T extends object>(
-	message: T,
+function withheldPlaceholder<T extends object>(message: T): T {
+	return { ...message, content: [] } as T;
+}
+
+export function withheldLines(
 	violations: Violation[],
-): T {
-	const reasons = violations.map((v) => v.reason).join("; ");
-	return {
-		...message,
-		content: [
-			{
-				type: "text",
-				text: `${WITHHELD_PREFIX}, rewriting: ${reasons})`,
-			},
-		],
-	} as T;
+	expanded: boolean,
+	expandKey: string,
+): string[] {
+	const rules = [...new Set(violations.map((violation) => violation.rule))];
+	const head = `Withheld by classifier. rule: ${rules.join(", ")}`;
+	if (!expanded) {
+		return [`${head} (${expandKey} to expand)`];
+	}
+	return [head, ...violations.map((violation) => `  ${violation.reason}`)];
 }
 
 function isFinalAssistantReply(message: EndedMessage): boolean {
@@ -474,7 +479,8 @@ class Classifier {
 		}
 		this.spent = limited.spent;
 		this.requestRewrite(ctx, reply, violations);
-		return { message: withheldPlaceholder(event.message, violations) };
+		this.pi.appendEntry<WithheldEntry>(WITHHELD_ENTRY_TYPE, { violations });
+		return { message: withheldPlaceholder(event.message) };
 	}
 
 	private async classifyToolCall(
@@ -591,7 +597,7 @@ class Classifier {
 			return undefined;
 		}
 		const reply = textFromContent(message.content);
-		if (reply.length < MIN_REPLY_LENGTH || reply.startsWith(WITHHELD_PREFIX)) {
+		if (reply.length < MIN_REPLY_LENGTH) {
 			return undefined;
 		}
 		return reply;
@@ -661,6 +667,14 @@ export default function autoClassifier(pi: ExtensionAPI) {
 	pi.on("message_update", hideDraft);
 	pi.on("message_end", async (event, ctx) =>
 		classifier.onMessageEnd(event, ctx),
+	);
+	pi.registerEntryRenderer<WithheldEntry>(
+		WITHHELD_ENTRY_TYPE,
+		(entry, { expanded }, theme) => {
+			const violations = entry.data?.violations ?? [];
+			const lines = withheldLines(violations, expanded, keyText(EXPAND_KEY));
+			return new Text(theme.fg("muted", lines.join("\n")), 1, 0);
+		},
 	);
 	pi.on("input", async (event) => classifier.captureUserRequest(event.text));
 	pi.on("tool_call", async (event, ctx) => classifier.onToolCall(event, ctx));
