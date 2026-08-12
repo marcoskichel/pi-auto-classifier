@@ -152,12 +152,18 @@ test("session_start shows classifier state in the status bar", async () => {
 	assert.match(app.badge(), /classifier \(\d+\)/);
 });
 
-test("menu toggles the classifier off", async () => {
+test("the top row marks every rule off, then restores them", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
-	app.keys.push("\r", "\u001b");
+	app.keys.push("\u001b[B", "\r", "\u001b[A", "\r");
 	await app.commands.classifier.handler([], app.ctx);
 	assert.match(app.badge(), /classifier off/);
+	assert.ok(app.menu().every((line) => !line.includes("\u25CF")));
+	app.keys.push("\r", "\u001b");
+	await app.commands.classifier.handler([], app.ctx);
+	const rows = app.menu();
+	assert.ok(rows.some((line) => line.includes("\u25CB ")));
+	assert.ok(rows.some((line) => line.includes("\u25CF ")));
 });
 
 test("menu toggles a single rule and keeps the cursor in place", async () => {
