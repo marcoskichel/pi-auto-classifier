@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.2.0...pi-auto-classifier-v1.3.0) (2026-08-12)
+
+
+### Features
+
+* show withheld replies as one expandable chat line ([#37](https://github.com/marcoskichel/pi-auto-classifier/issues/37)) ([9176e4b](https://github.com/marcoskichel/pi-auto-classifier/commit/9176e4b5ff24f31fabca5cbdc56db069d34a4aea))
+* toggle individual classifier rules ([#40](https://github.com/marcoskichel/pi-auto-classifier/issues/40)) ([e5807c4](https://github.com/marcoskichel/pi-auto-classifier/commit/e5807c4f8671a335457c3b479ac8358d6afc8147))
+
 ## [1.2.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.1.1...pi-auto-classifier-v1.2.0) (2026-08-11)
 
 
