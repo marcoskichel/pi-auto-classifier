@@ -59,10 +59,16 @@ function setup() {
 
 	let status = "";
 	const notices: string[] = [];
+	const picks: (string | undefined)[] = [];
+	let menuOptions: string[] = [];
 	const ctx = {
 		cwd: process.cwd(),
 		hasUI: true,
 		ui: {
+			select: async (_title: string, options: string[]) => {
+				menuOptions = options;
+				return picks.shift();
+			},
 			setStatus: (_key: string, text: string) => {
 				status = text;
 			},
@@ -84,7 +90,9 @@ function setup() {
 		renderers,
 		ctx,
 		notices,
+		picks,
 		badge: () => status,
+		menu: () => menuOptions,
 	};
 }
 
@@ -114,12 +122,25 @@ test("session_start shows classifier state in the status bar", async () => {
 	assert.match(app.badge(), /classifier \(\d+\)/);
 });
 
-test("toggle flips the badge and notifies", async () => {
+test("menu toggles the classifier off", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
+	app.picks.push("\u25CF classifier (all rules)", undefined);
 	await app.commands.classifier.handler([], app.ctx);
 	assert.match(app.badge(), /classifier off/);
-	assert.deepEqual(app.notices, ["Auto classifier disabled"]);
+});
+
+test("menu toggles a single rule off and back on", async () => {
+	const app = setup();
+	await app.handlers.session_start({}, app.ctx);
+	const total = Number(app.badge().match(/classifier \((\d+)\)/)?.[1]);
+	app.picks.push(`\u25CF ste-tldr.md`, undefined);
+	await app.commands.classifier.handler([], app.ctx);
+	assert.match(app.badge(), new RegExp(`classifier \\(${total - 1}\\)`));
+	assert.ok(app.menu().includes("\u25CB ste-tldr.md"));
+	app.picks.push(`\u25CB ste-tldr.md`, undefined);
+	await app.commands.classifier.handler([], app.ctx);
+	assert.match(app.badge(), new RegExp(`classifier \\(${total}\\)`));
 });
 
 test("message_start blanks assistant draft text", async () => {

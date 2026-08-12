@@ -435,6 +435,7 @@ function isFinalAssistantReply(message: EndedMessage): boolean {
 class Classifier {
 	private rules: Rule[] = [];
 	private toolRules: Rule[] = [];
+	private readonly disabledRules = new Set<string>();
 	private userRequest = "";
 	private spent: string[] = [];
 	private modelSpec = DEFAULT_MODEL_SPEC;
@@ -454,10 +455,14 @@ class Classifier {
 		}
 	}
 
+	private activeRules(rules: Rule[]): Rule[] {
+		return rules.filter((rule) => !this.disabledRules.has(rule.name));
+	}
+
 	hideDraft(message: DraftMessage): void {
 		if (
 			this.isEnabled &&
-			this.rules.length > 0 &&
+			this.activeRules(this.rules).length > 0 &&
 			message.role === "assistant"
 		) {
 			maskDraftText(message);
@@ -503,7 +508,7 @@ class Classifier {
 		try {
 			debugLog(
 				buildToolPrompt(
-					this.toolRules,
+					this.activeRules(this.toolRules),
 					event.toolName,
 					event.input,
 					this.userRequest,
@@ -513,7 +518,7 @@ class Classifier {
 				ctx,
 				this.modelSpec,
 				buildToolPrompt(
-					this.toolRules,
+					this.activeRules(this.toolRules),
 					event.toolName,
 					event.input,
 					this.userRequest,
@@ -539,7 +544,7 @@ class Classifier {
 				ctx,
 				this.modelSpec,
 				buildOverridePrompt(
-					this.toolRules,
+					this.activeRules(this.toolRules),
 					violations,
 					event.toolName,
 					event.input,
@@ -567,7 +572,7 @@ class Classifier {
 		event: { toolName: string; input: unknown },
 		ctx: ExtensionContext,
 	): Promise<{ block: true; reason: string } | undefined> {
-		if (!this.isEnabled || this.toolRules.length === 0) {
+		if (!this.isEnabled || this.activeRules(this.toolRules).length === 0) {
 			return undefined;
 		}
 		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2026`);
@@ -601,10 +606,41 @@ class Classifier {
 		}
 	}
 
+	async openMenu(ctx: ExtensionContext): Promise<void> {
+		if (!ctx.hasUI) {
+			this.toggle(ctx);
+			return;
+		}
+		const all = [...this.rules, ...this.toolRules];
+		for (;;) {
+			const master = `${this.isEnabled ? ENABLED_MARK : DISABLED_MARK} classifier (all rules)`;
+			const options = [
+				master,
+				...all.map(
+					(rule) =>
+						`${this.disabledRules.has(rule.name) ? DISABLED_MARK : ENABLED_MARK} ${rule.name}`,
+				),
+			];
+			const choice = await ctx.ui.select("Toggle classifier rules", options);
+			if (choice === undefined) {
+				return;
+			}
+			if (choice === master) {
+				this.isEnabled = !this.isEnabled;
+			} else {
+				const name = choice.slice(2);
+				if (!this.disabledRules.delete(name)) {
+					this.disabledRules.add(name);
+				}
+			}
+			this.showIdleStatus(ctx);
+		}
+	}
+
 	private replyToCheck(message: EndedMessage): string | undefined {
 		if (
 			!this.isEnabled ||
-			this.rules.length === 0 ||
+			this.activeRules(this.rules).length === 0 ||
 			!isFinalAssistantReply(message)
 		) {
 			return undefined;
@@ -625,7 +661,7 @@ class Classifier {
 			return await requestVerdict(
 				ctx,
 				this.modelSpec,
-				buildClassifierPrompt(this.rules, reply),
+				buildClassifierPrompt(this.activeRules(this.rules), reply),
 			);
 		} catch (error) {
 			debugLog(`classifier error: ${String(error)}`);
@@ -672,7 +708,7 @@ class Classifier {
 		this.setStatus(
 			ctx,
 			this.isEnabled
-				? `${ENABLED_MARK} classifier (${this.rules.length + this.toolRules.length})`
+				? `${ENABLED_MARK} classifier (${this.activeRules(this.rules).length + this.activeRules(this.toolRules).length})`
 				: `${DISABLED_MARK} classifier off`,
 		);
 	}
@@ -701,7 +737,7 @@ export default function autoClassifier(pi: ExtensionAPI) {
 	pi.on("tool_call", async (event, ctx) => classifier.onToolCall(event, ctx));
 	pi.registerCommand("classifier", {
 		description:
-			"Toggle the classifier (output rules in .pi/output-rules/, tool rules in .pi/tool-rules/) on or off",
-		handler: async (_args, ctx) => classifier.toggle(ctx),
+			"Toggle the classifier or individual rules (output rules in .pi/output-rules/, tool rules in .pi/tool-rules/)",
+		handler: async (_args, ctx) => classifier.openMenu(ctx),
 	});
 }
