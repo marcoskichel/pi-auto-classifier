@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.3.1...pi-auto-classifier-v1.4.0) (2026-08-13)
+
+
+### Features
+
+* drop the bundled STE rule ([#45](https://github.com/marcoskichel/pi-auto-classifier/issues/45)) ([8926e66](https://github.com/marcoskichel/pi-auto-classifier/commit/8926e66fdfdc4b865e47a488c938af23f62bad94))
+* save classifier toggles across sessions ([#43](https://github.com/marcoskichel/pi-auto-classifier/issues/43)) ([10070f9](https://github.com/marcoskichel/pi-auto-classifier/commit/10070f94e97b0300d280e5902bf7e38e8608caf1))
+
 ## [1.3.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.3.0...pi-auto-classifier-v1.3.1) (2026-08-13)
 
 
