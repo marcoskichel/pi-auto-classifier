@@ -376,6 +376,31 @@ test("a once rule fails one time per turn and carries its own message", () => {
 	});
 });
 
+test("a once rule matches when the judge reports a bullet line as the rule", () => {
+	const rules = [
+		parseRule(
+			"tldr.md",
+			"---\nonce: be shorter\n---\n\n# TLDR\n- Lead with the answer or result. No preamble.",
+		),
+	];
+	const violations = [
+		{ rule: "Lead with the answer or result. No preamble.", reason: "buried" },
+	];
+	assert.deepEqual(applyOnceRules(rules, violations, []), {
+		violations: [
+			{
+				rule: "Lead with the answer or result. No preamble.",
+				reason: "be shorter",
+			},
+		],
+		spent: ["tldr.md"],
+	});
+	assert.deepEqual(applyOnceRules(rules, violations, ["tldr.md"]), {
+		violations: [],
+		spent: ["tldr.md"],
+	});
+});
+
 test("a once rule with no message keeps the judge reason", () => {
 	const rules = [parseRule("brevity.md", "---\nonce:\n---\n# Brevity")];
 	assert.deepEqual(

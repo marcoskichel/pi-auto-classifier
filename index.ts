@@ -340,9 +340,10 @@ function rulesViolation(violation: Violation, rule: Rule): boolean {
 	const reported = normalizeName(violation.rule);
 	return (
 		reported.length > 0 &&
-		ruleAliases(rule).some(
-			(alias) => reported.includes(alias) || alias.includes(reported),
-		)
+		(rule.text.includes(violation.rule) ||
+			ruleAliases(rule).some(
+				(alias) => reported.includes(alias) || alias.includes(reported),
+			))
 	);
 }
 
