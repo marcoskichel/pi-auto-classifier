@@ -14,12 +14,12 @@ import { Text } from "@earendil-works/pi-tui";
 
 const DEFAULT_MODEL_SPEC = "anthropic/claude-haiku-4-5";
 const CONFIG_FILE_NAME = "auto-classifier.json";
-const GLOBAL_CONFIG_PATH = path.join(
-	os.homedir(),
-	CONFIG_DIR_NAME,
-	"agent",
-	CONFIG_FILE_NAME,
-);
+function globalConfigPath(): string {
+	return (
+		process.env.PI_AUTO_CLASSIFIER_CONFIG ??
+		path.join(os.homedir(), CONFIG_DIR_NAME, "agent", CONFIG_FILE_NAME)
+	);
+}
 const DEBUG_LOG_PATH = process.env.PI_AUTO_CLASSIFIER_DEBUG;
 const MIN_REPLY_LENGTH = 40;
 const STATUS_KEY = "auto-classifier";
@@ -54,7 +54,11 @@ type Verdict = {
 	violations: Violation[];
 	userAsked?: boolean;
 };
-type ClassifierConfig = { model?: string };
+type ClassifierConfig = {
+	model?: string;
+	enabled?: boolean;
+	disabledRules?: string[];
+};
 type WithheldEntry = { violations: Violation[] };
 type MenuTheme = {
 	fg(color: "accent" | "text" | "dim", text: string): string;
@@ -83,9 +87,16 @@ function resolveModelSpec(cwd: string): string {
 	return (
 		process.env.PI_AUTO_CLASSIFIER_MODEL ??
 		readConfigFile(projectConfigPath).model ??
-		readConfigFile(GLOBAL_CONFIG_PATH).model ??
+		readConfigFile(globalConfigPath()).model ??
 		DEFAULT_MODEL_SPEC
 	);
+}
+
+function saveGlobalConfig(patch: ClassifierConfig): void {
+	const file = globalConfigPath();
+	const merged = { ...readConfigFile(file), ...patch };
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	fs.writeFileSync(file, `${JSON.stringify(merged, null, 2)}\n`);
 }
 
 function readRulesFromDir(dir: string): Rule[] {
@@ -454,6 +465,11 @@ class Classifier {
 		this.rules = loadRules(ctx.cwd);
 		this.toolRules = loadToolRules(ctx.cwd);
 		this.modelSpec = resolveModelSpec(ctx.cwd);
+		const saved = readConfigFile(globalConfigPath());
+		this.isEnabled = saved.enabled !== false;
+		for (const name of saved.disabledRules ?? []) {
+			this.disabledRules.add(name);
+		}
 		if (this.rules.length + this.toolRules.length > 0) {
 			this.showIdleStatus(ctx);
 		}
@@ -610,6 +626,24 @@ class Classifier {
 		}
 	}
 
+	saveState(ctx: ExtensionContext): void {
+		try {
+			saveGlobalConfig({
+				enabled: this.isEnabled,
+				disabledRules: [...this.disabledRules],
+			});
+		} catch (error) {
+			debugLog(`save failed: ${String(error)}`);
+			if (ctx.hasUI) {
+				ctx.ui.notify(`Classifier save failed: ${String(error)}`, "error");
+			}
+			return;
+		}
+		if (ctx.hasUI) {
+			ctx.ui.notify("Classifier state saved for new sessions", "info");
+		}
+	}
+
 	menuRows(): string[] {
 		return [
 			`${this.isEnabled ? ENABLED_MARK : DISABLED_MARK} classifier (all rules)`,
@@ -660,7 +694,7 @@ class Classifier {
 							? theme.fg("accent", `> ${row}`)
 							: theme.fg("text", `  ${row}`),
 					),
-					theme.fg("dim", "↑↓ move • enter toggle • esc close"),
+					theme.fg("dim", "↑↓ move • enter toggle • s save • esc close"),
 				];
 			},
 			handleInput: (data: string) => {
@@ -671,6 +705,8 @@ class Classifier {
 					cursor = (cursor + 1) % rows;
 				} else if (data === "\r" || data === "\n" || data === " ") {
 					this.toggleRow(cursor, ctx);
+				} else if (data === "s" || data === "S") {
+					this.saveState(ctx);
 				} else if (data === "\u001b" || data === "\u0003") {
 					done();
 					return;

@@ -185,6 +185,32 @@ test("menu toggles a rule back on", async () => {
 	assert.match(app.badge(), new RegExp(`classifier \\(${total}\\)`));
 });
 
+test("s saves toggles and a new session restores them", async () => {
+	const config = path.join(
+		fs.mkdtempSync(path.join(os.tmpdir(), "classifier-config-")),
+		"auto-classifier.json",
+	);
+	fs.writeFileSync(config, '{"model":"anthropic/keep-me"}');
+	process.env.PI_AUTO_CLASSIFIER_CONFIG = config;
+	try {
+		const app = setup();
+		await app.handlers.session_start({}, app.ctx);
+		const total = Number(app.badge().match(/classifier \((\d+)\)/)?.[1]);
+		app.keys.push("\u001b[B", "\r", "s", "\u001b");
+		await app.commands.classifier.handler([], app.ctx);
+		assert.deepEqual(app.notices, ["Classifier state saved for new sessions"]);
+		const next = setup();
+		await next.handlers.session_start({}, next.ctx);
+		assert.match(next.badge(), new RegExp(`classifier \\(${total - 1}\\)`));
+		assert.equal(
+			JSON.parse(fs.readFileSync(config, "utf8")).model,
+			"anthropic/keep-me",
+		);
+	} finally {
+		delete process.env.PI_AUTO_CLASSIFIER_CONFIG;
+	}
+});
+
 test("message_start blanks assistant draft text", async () => {
 	const app = setup();
 	await app.handlers.session_start({}, app.ctx);
