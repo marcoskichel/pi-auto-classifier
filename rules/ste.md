@@ -1,3 +1,7 @@
+---
+once: Rewrite every sentence in active voice. Write one instruction per sentence. Use 20 words or fewer.
+---
+
 # ASD-STE100 Simplified Technical English
 
 The reply must follow these rules.
