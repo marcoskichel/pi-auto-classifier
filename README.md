@@ -2,7 +2,7 @@
 
 A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules, and every tool call against markdown tool rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. It keeps asking for rewrites until the reply passes. Classifier errors fail open.
 
-Ships with two rules: [ASD-STE100 Simplified Technical English](rules/ste.md) — active voice, short sentences — and [TLDR](rules/tldr.md) — answer first, no filler.
+Ships with one rule: [TLDR](rules/tldr.md) — answer first, no filler.
 
 ## Install
 
