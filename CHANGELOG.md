@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.4.0...pi-auto-classifier-v1.4.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* match once rules when the judge reports a bullet line ([#46](https://github.com/marcoskichel/pi-auto-classifier/issues/46)) ([971e2d2](https://github.com/marcoskichel/pi-auto-classifier/commit/971e2d29fd7b1942e3f01e0439c676f13db295ab))
+
 ## [1.4.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.3.1...pi-auto-classifier-v1.4.0) (2026-08-13)
 
 
