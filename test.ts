@@ -10,6 +10,7 @@ import autoClassifier, {
 	applyOnceRules,
 	emptiedReply,
 	parseRule,
+	rulesViolation,
 	withheldLines,
 } from "./index.ts";
 
@@ -330,6 +331,25 @@ test("tool_call fails open and counts project tool rules", async () => {
 		ctx,
 	);
 	assert.equal(blocked, undefined);
+});
+
+test("rulesViolation rejects invented rule names", () => {
+	const rule = {
+		name: "no-branch-switch.md",
+		text: "# Never switch branches\nUse a worktree.",
+	};
+	assert.equal(
+		rulesViolation({ rule: "no-branch-switch.md", reason: "x" }, rule),
+		true,
+	);
+	assert.equal(
+		rulesViolation({ rule: "Never switch branches", reason: "x" }, rule),
+		true,
+	);
+	assert.equal(
+		rulesViolation({ rule: "use-valid-model-names", reason: "x" }, rule),
+		false,
+	);
 });
 
 test("parseRule reads the once key and strips the frontmatter", () => {

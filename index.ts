@@ -41,6 +41,8 @@ const EXPAND_KEY = "app.tools.expand";
 const TOOL_PROMPT_HEADER = [
 	"You are a strict policy checker for an AI coding assistant's tool calls.",
 	"Judge the tool call below against the rules. Fail it only when a rule clearly forbids it.",
+	"Judge only what the rules explicitly state. Never invent requirements (model names, APIs,",
+	"style) that the rules do not mention.",
 	"Each violation reason goes back to the assistant as a direct order, so write it as an",
 	"imperative instruction that names the action to take instead. Never address the user.",
 ].join("\n");
@@ -336,7 +338,7 @@ function ruleAliases(rule: Rule): string[] {
 		.filter((alias) => alias.length > 0);
 }
 
-function rulesViolation(violation: Violation, rule: Rule): boolean {
+export function rulesViolation(violation: Violation, rule: Rule): boolean {
 	const reported = normalizeName(violation.rule);
 	return (
 		reported.length > 0 &&
@@ -584,18 +586,22 @@ class Classifier {
 		if (!verdict) {
 			return undefined;
 		}
-		if (verdict.pass || verdict.violations.length === 0) {
+		const active = this.activeRules(this.toolRules);
+		const violations = verdict.violations.filter((violation) =>
+			active.some((rule) => rulesViolation(violation, rule)),
+		);
+		if (verdict.pass || violations.length === 0) {
 			this.showIdleStatus(ctx);
 			return undefined;
 		}
-		if (await this.userAskedFor(ctx, event, verdict.violations)) {
+		if (await this.userAskedFor(ctx, event, violations)) {
 			this.setStatus(ctx, `${ENABLED_MARK} classifier \u2713 user asked`);
 			return undefined;
 		}
 		this.setStatus(ctx, `${ENABLED_MARK} classifier \u2298 ${event.toolName}`);
 		return {
 			block: true,
-			reason: verdict.violations.map(formatViolation).join("\n"),
+			reason: violations.map(formatViolation).join("\n"),
 		};
 	}
 
