@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.3.0...pi-auto-classifier-v1.3.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* cap the STE rule at one failure per turn ([#41](https://github.com/marcoskichel/pi-auto-classifier/issues/41)) ([06db214](https://github.com/marcoskichel/pi-auto-classifier/commit/06db2143b4542bebc9da97dff83d4745e50272f6))
+
 ## [1.3.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.2.0...pi-auto-classifier-v1.3.0) (2026-08-12)
 
 
