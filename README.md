@@ -22,7 +22,7 @@ Or add a local checkout to `~/.pi/agent/settings.json`:
 
 - `/classifier` — open the toggle menu: the first row turns the whole classifier on/off, each other row turns one rule on/off. Esc closes it.
 - The status bar shows the current state and the number of active rules
-- Rule toggles last for the session; they are not saved
+- Toggles last for the session. Press `s` in the menu to save them to `~/.pi/agent/auto-classifier.json`, so new sessions start with the same rules off.
 - A withheld reply leaves one muted line in the chat: `Withheld by classifier. rule: <rules>`. Press the expand key (`ctrl+o` by default) to read the reasons.
 
 ## Rules
