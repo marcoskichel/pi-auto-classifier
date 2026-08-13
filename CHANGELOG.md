@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.2](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.4.1...pi-auto-classifier-v1.4.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* drop tool-call violations that cite no real rule ([#48](https://github.com/marcoskichel/pi-auto-classifier/issues/48)) ([e527262](https://github.com/marcoskichel/pi-auto-classifier/commit/e527262618fe41df93c6081f91a01a46b9ddf6ac))
+
 ## [1.4.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.4.0...pi-auto-classifier-v1.4.1) (2026-08-13)
 
 
