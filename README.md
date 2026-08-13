@@ -50,7 +50,7 @@ once: Make your reply much shorter, like a TLDR, remove trivia and all unnecessa
 ...
 ```
 
-The first violation asks for a rewrite and sends the `once` text as the reason, instead of whatever the judge wrote. Later violations of that rule are dropped for the rest of the turn, so the reply ships when no other rule fails. The next user message re-arms the rule. Write `once:` with no text to cap the rule but keep the judge's own reason. The bundled TLDR rule uses this; the STE rule does not.
+The first violation asks for a rewrite and sends the `once` text as the reason, instead of whatever the judge wrote. Later violations of that rule are dropped for the rest of the turn, so the reply ships when no other rule fails. The next user message re-arms the rule. Write `once:` with no text to cap the rule but keep the judge's own reason. Both bundled rules use this.
 
 ## Tool rules
 
