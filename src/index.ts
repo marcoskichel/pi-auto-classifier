@@ -501,6 +501,12 @@ class Classifier {
 		this.modelSpec = resolveModelSpec(ctx.cwd);
 		const saved = readConfigFile(globalConfigPath());
 		this.isEnabled = saved.enabled !== false;
+		if (ctx.hasUI && this.rules.length + this.toolRules.length === 0) {
+			ctx.ui.notify(
+				"Classifier: no rules installed. Run /classifier-install to pick one from the catalog.",
+				"warning",
+			);
+		}
 		for (const name of saved.disabledRules ?? []) {
 			this.disabledRules.add(name);
 		}

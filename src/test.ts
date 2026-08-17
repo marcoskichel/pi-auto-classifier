@@ -167,6 +167,9 @@ test("session_start with no rules shows it in the status bar", async () => {
 		app.ctx.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "no-rules-"));
 		await app.handlers.session_start({}, app.ctx);
 		assert.match(app.badge(), /classifier \(no rules\)/);
+		assert.deepEqual(app.notices, [
+			"Classifier: no rules installed. Run /classifier-install to pick one from the catalog.",
+		]);
 	} finally {
 		delete process.env.PI_AUTO_CLASSIFIER_USER_DIR;
 	}
