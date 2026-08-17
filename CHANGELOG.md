@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.4.2...pi-auto-classifier-v2.0.0) (2026-08-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* the bundled TLDR rule no longer auto-loads. After updating, run `/classifier-install` to reinstall it (or any catalog rule) into `~/.pi/agent/output-rules/`. Custom rules are unaffected.
+
+### Features
+
+* opt-in rules installed from the GitHub catalog ([#51](https://github.com/marcoskichel/pi-auto-classifier/issues/51)) ([1e617fa](https://github.com/marcoskichel/pi-auto-classifier/commit/1e617fa004b7b42064f95bb18b7b790f040c5901))
+
 ## [1.4.2](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.4.1...pi-auto-classifier-v1.4.2) (2026-08-13)
 
 
