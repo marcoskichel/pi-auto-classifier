@@ -870,15 +870,14 @@ class Classifier {
 			this.setStatus(ctx, `${DISABLED_MARK} classifier off`);
 			return;
 		}
+		if (this.rules.length + this.toolRules.length === 0) {
+			this.setStatus(ctx, `${DISABLED_MARK} classifier (no rules)`);
+			return;
+		}
 		const count =
 			this.activeRules(this.rules).length +
 			this.activeRules(this.toolRules).length;
-		this.setStatus(
-			ctx,
-			count === 0
-				? `${DISABLED_MARK} classifier (no rules)`
-				: `${ENABLED_MARK} classifier (${count})`,
-		);
+		this.setStatus(ctx, `${ENABLED_MARK} classifier (${count})`);
 	}
 }
 

@@ -6,6 +6,10 @@ import * as path from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+process.env.PI_AUTO_CLASSIFIER_USER_DIR = fs.mkdtempSync(
+	path.join(os.tmpdir(), "classifier-user-"),
+);
+
 import autoClassifier, {
 	applyOnceRules,
 	emptiedReply,
@@ -159,20 +163,13 @@ test("no-comments ignores comment lookalikes in literals", () => {
 });
 
 test("session_start with no rules shows it in the status bar", async () => {
-	process.env.PI_AUTO_CLASSIFIER_USER_DIR = fs.mkdtempSync(
-		path.join(os.tmpdir(), "empty-user-"),
-	);
-	try {
-		const app = setup();
-		app.ctx.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "no-rules-"));
-		await app.handlers.session_start({}, app.ctx);
-		assert.match(app.badge(), /classifier \(no rules\)/);
-		assert.deepEqual(app.notices, [
-			"Classifier: no rules installed. Run /classifier-install to pick one from the catalog.",
-		]);
-	} finally {
-		delete process.env.PI_AUTO_CLASSIFIER_USER_DIR;
-	}
+	const app = setup();
+	app.ctx.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "no-rules-"));
+	await app.handlers.session_start({}, app.ctx);
+	assert.match(app.badge(), /classifier \(no rules\)/);
+	assert.deepEqual(app.notices, [
+		"Classifier: no rules installed. Run /classifier-install to pick one from the catalog.",
+	]);
 });
 
 test("session_start shows classifier state in the status bar", async () => {
@@ -376,7 +373,9 @@ test("tool_call fails open and counts project tool rules", async () => {
 	);
 	const bare = setup();
 	await bare.handlers.session_start({}, { ...bare.ctx, cwd: os.tmpdir() });
-	const baseline = Number(bare.badge().match(/classifier \((\d+)\)/)?.[1]);
+	const baseline = Number(
+		bare.badge().match(/classifier \((\d+)\)/)?.[1] ?? "0",
+	);
 	const ctx = { ...app.ctx, cwd };
 	await app.handlers.session_start({}, ctx);
 	assert.match(app.badge(), new RegExp(`classifier \\(${baseline + 1}\\)`));
