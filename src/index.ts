@@ -25,8 +25,15 @@ const STATUS_KEY = "auto-classifier";
 const FEEDBACK_MESSAGE_TYPE = "auto-classifier";
 const PROJECT_RULES_DIR = path.join(".pi", "output-rules");
 const PROJECT_TOOL_RULES_DIR = path.join(".pi", "tool-rules");
-const USER_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
-const USER_RULES_DIR = path.join(USER_DIR, "output-rules");
+function userDir(): string {
+	return (
+		process.env.PI_AUTO_CLASSIFIER_USER_DIR ??
+		path.join(os.homedir(), CONFIG_DIR_NAME, "agent")
+	);
+}
+function userRulesDir(): string {
+	return path.join(userDir(), "output-rules");
+}
 const CATALOG_URL =
 	"https://api.github.com/repos/marcoskichel/pi-auto-classifier/contents/rules";
 const MAX_TOOL_INPUT_CHARS = 4000;
@@ -125,7 +132,7 @@ export function parseRule(name: string, raw: string): Rule {
 
 function loadRules(cwd: string): Rule[] {
 	return [
-		...readRulesFromDir(USER_RULES_DIR),
+		...readRulesFromDir(userRulesDir()),
 		...readRulesFromDir(path.join(cwd, PROJECT_RULES_DIR)),
 	];
 }
@@ -158,7 +165,7 @@ async function fetchCatalog(): Promise<CatalogEntry[]> {
 
 function loadToolRules(cwd: string): Rule[] {
 	return [
-		...readRulesFromDir(path.join(USER_DIR, "tool-rules")),
+		...readRulesFromDir(path.join(userDir(), "tool-rules")),
 		...readRulesFromDir(path.join(cwd, PROJECT_TOOL_RULES_DIR)),
 	];
 }
@@ -497,9 +504,7 @@ class Classifier {
 		for (const name of saved.disabledRules ?? []) {
 			this.disabledRules.add(name);
 		}
-		if (this.rules.length + this.toolRules.length > 0) {
-			this.showIdleStatus(ctx);
-		}
+		this.showIdleStatus(ctx);
 	}
 
 	private activeRules(rules: Rule[]): Rule[] {
@@ -725,8 +730,8 @@ class Classifier {
 				return;
 			}
 			const text = await fetchText(entry.downloadUrl);
-			fs.mkdirSync(USER_RULES_DIR, { recursive: true });
-			fs.writeFileSync(path.join(USER_RULES_DIR, entry.name), text);
+			fs.mkdirSync(userRulesDir(), { recursive: true });
+			fs.writeFileSync(path.join(userRulesDir(), entry.name), text);
 			this.rules = loadRules(ctx.cwd);
 			this.showIdleStatus(ctx);
 			ctx.ui.notify(`Installed ${entry.name}`, "info");
@@ -855,11 +860,18 @@ class Classifier {
 	}
 
 	private showIdleStatus(ctx: ExtensionContext): void {
+		if (!this.isEnabled) {
+			this.setStatus(ctx, `${DISABLED_MARK} classifier off`);
+			return;
+		}
+		const count =
+			this.activeRules(this.rules).length +
+			this.activeRules(this.toolRules).length;
 		this.setStatus(
 			ctx,
-			this.isEnabled
-				? `${ENABLED_MARK} classifier (${this.activeRules(this.rules).length + this.activeRules(this.toolRules).length})`
-				: `${DISABLED_MARK} classifier off`,
+			count === 0
+				? `${DISABLED_MARK} classifier no rules (/classifier-install)`
+				: `${ENABLED_MARK} classifier (${count})`,
 		);
 	}
 }
