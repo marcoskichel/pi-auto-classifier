@@ -2,7 +2,7 @@
 
 A [pi](https://github.com/badlogic/pi-mono) extension that checks every final assistant reply against markdown output rules, and every tool call against markdown tool rules. It hides the draft while the model streams, withholds replies that violate the rules, and asks the model to rewrite them. It keeps asking for rewrites until the reply passes. Classifier errors fail open.
 
-Ships with one rule: [TLDR](rules/tldr.md) — answer first, no filler.
+No rules load by default. Install rules from the [catalog](rules/) with `/classifier-install`, or write your own.
 
 ## Install
 
@@ -20,6 +20,7 @@ Or add a local checkout to `~/.pi/agent/settings.json`:
 
 ## Usage
 
+- `/classifier-install` — pick a rule from the catalog in this repo and install it to `~/.pi/agent/output-rules/`. Uninstall by deleting the file.
 - `/classifier` — open the toggle menu: the first row turns the whole classifier on/off, each other row turns one rule on/off. Esc closes it.
 - The status bar shows the current state and the number of active rules
 - Toggles last for the session. Press `s` in the menu to save them to `~/.pi/agent/auto-classifier.json`, so new sessions start with the same rules off.
@@ -31,7 +32,6 @@ Rules are markdown files — plain prose the classifier model can judge against.
 
 | Location | Scope |
 | --- | --- |
-| `rules/` (inside this repo) | output rules, bundled |
 | `~/.pi/agent/output-rules/` | output rules, all projects |
 | `<project>/.pi/output-rules/` | output rules, per project |
 | `~/.pi/agent/tool-rules/` | tool rules, all projects |
@@ -50,7 +50,7 @@ once: Make your reply much shorter, like a TLDR, remove trivia and all unnecessa
 ...
 ```
 
-The first violation asks for a rewrite and sends the `once` text as the reason, instead of whatever the judge wrote. Later violations of that rule are dropped for the rest of the turn, so the reply ships when no other rule fails. The next user message re-arms the rule. Write `once:` with no text to cap the rule but keep the judge's own reason. Both bundled rules use this.
+The first violation asks for a rewrite and sends the `once` text as the reason, instead of whatever the judge wrote. Later violations of that rule are dropped for the rest of the turn, so the reply ships when no other rule fails. The next user message re-arms the rule. Write `once:` with no text to cap the rule but keep the judge's own reason. The catalog's TLDR rule uses this.
 
 ## Tool rules
 
@@ -80,6 +80,10 @@ Classifier model, resolved in this order:
 4. Default: `anthropic/claude-haiku-4-5`
 
 Set `PI_AUTO_CLASSIFIER_DEBUG=/path/to/log` to log classifier verdicts and errors.
+
+## Contributing a rule
+
+The catalog is the `rules/` directory in this repo. `/classifier-install` lists it live from GitHub, so a merged rule is available to everyone immediately, without a package release. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Development
 

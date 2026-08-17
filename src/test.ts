@@ -9,6 +9,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import autoClassifier, {
 	applyOnceRules,
 	emptiedReply,
+	parseCatalog,
 	parseRule,
 	rulesViolation,
 	withheldLines,
@@ -66,8 +67,14 @@ function setup() {
 	const notices: string[] = [];
 	const keys: string[] = [];
 	let menuLines: string[] = [];
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "classifier-cwd-"));
+	fs.mkdirSync(path.join(cwd, ".pi", "output-rules"), { recursive: true });
+	fs.writeFileSync(
+		path.join(cwd, ".pi", "output-rules", "tldr.md"),
+		"# TLDR\nLead with the answer.",
+	);
 	const ctx = {
-		cwd: process.cwd(),
+		cwd,
 		hasUI: true,
 		mode: "tui",
 		ui: {
@@ -460,4 +467,17 @@ test("a once rule with no message keeps the judge reason", () => {
 			spent: ["brevity.md"],
 		},
 	);
+});
+
+test("parseCatalog keeps only .md files with a download url", () => {
+	assert.deepEqual(
+		parseCatalog([
+			{ name: "tldr.md", download_url: "https://x/tldr.md" },
+			{ name: "README.txt", download_url: "https://x/README.txt" },
+			{ name: "broken.md" },
+			"junk",
+		]),
+		[{ name: "tldr.md", downloadUrl: "https://x/tldr.md" }],
+	);
+	assert.deepEqual(parseCatalog({ message: "rate limited" }), []);
 });
