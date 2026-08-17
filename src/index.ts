@@ -29,6 +29,7 @@ const PROJECT_TOOL_RULES_DIR = path.join(".pi", "tool-rules");
 const USER_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
 const GLOBAL_RULES_DIR = path.join(
 	path.dirname(fileURLToPath(import.meta.url)),
+	"..",
 	"rules",
 );
 const MAX_TOOL_INPUT_CHARS = 4000;

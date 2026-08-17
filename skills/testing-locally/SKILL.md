@@ -1,6 +1,6 @@
 ---
 name: testing-locally
-description: Prove a change to this extension works in a live pi session before pushing it. Use before every push or PR that touches index.ts, dev.ts, or any rule file. Covers loading the working copy, testing it through a subagent, and restoring the user's settings.
+description: Prove a change to this extension works in a live pi session before pushing it. Use before every push or PR that touches src/index.ts, src/dev.ts, or any rule file. Covers loading the working copy, testing it through a subagent, and restoring the user's settings.
 ---
 
 # Testing locally
@@ -15,7 +15,7 @@ Never push a change to this extension until a subagent confirms the behavior.
 ## Steps
 
 1. Run `npm run dev` from the checkout you changed. It points
-   `~/.pi/agent/settings.json` at that `index.ts` and disables the published
+   `~/.pi/agent/settings.json` at that `src/index.ts` and disables the published
    package. It saves a backup first.
 2. Write the test case before you dispatch. Name the exact tool call or reply
    the subagent must produce, and the exact result you expect: a block, a

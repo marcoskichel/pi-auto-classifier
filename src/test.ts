@@ -21,7 +21,11 @@ function runNoComments(source: string): { code: number; output: string } {
 	);
 	fs.writeFileSync(file, source);
 	try {
-		execFileSync("node", ["no-comments.ts", file], { encoding: "utf8" });
+		execFileSync(
+			"node",
+			[path.join(import.meta.dirname, "no-comments.ts"), file],
+			{ encoding: "utf8" },
+		);
 		return { code: 0, output: "" };
 	} catch (error) {
 		const failure = error as { status: number; stderr: string };

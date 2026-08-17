@@ -17,16 +17,15 @@
     "url": "git+https://github.com/marcoskichel/pi-auto-classifier.git"
   },
   "files": [
-    "index.ts",
-    "dev.ts",
+    "src",
     "rules",
     "skills",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "check": "tsc && biome check && node no-comments.ts index.ts",
-    "dev": "node dev.ts",
+    "check": "tsc && biome check && node src/no-comments.ts src/index.ts",
+    "dev": "node src/dev.ts",
     "test": "node --test",
     "fix": "biome check --write"
   },
@@ -44,7 +43,7 @@
   },
   "pi": {
     "extensions": [
-      "./index.ts"
+      "./src/index.ts"
     ],
     "skills": [
       "./skills"
