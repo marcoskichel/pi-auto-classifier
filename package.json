@@ -1,7 +1,7 @@
 {
   "name": "pi-auto-classifier",
   "version": "1.4.2",
-  "description": "Pi extension that classifies every final assistant reply against markdown output rules and asks the model to rewrite violations. Ships with an ASD-STE100 Simplified Technical English + TLDR rule.",
+  "description": "Pi extension that classifies every final assistant reply against markdown output rules and asks the model to rewrite violations. Install rules from the catalog with /classifier-install.",
   "keywords": [
     "pi-package",
     "pi",
@@ -18,7 +18,6 @@
   },
   "files": [
     "src",
-    "rules",
     "skills",
     "README.md",
     "LICENSE"

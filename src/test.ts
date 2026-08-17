@@ -6,9 +6,14 @@ import * as path from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+process.env.PI_AUTO_CLASSIFIER_USER_DIR = fs.mkdtempSync(
+	path.join(os.tmpdir(), "classifier-user-"),
+);
+
 import autoClassifier, {
 	applyOnceRules,
 	emptiedReply,
+	parseCatalog,
 	parseRule,
 	rulesViolation,
 	withheldLines,
@@ -66,8 +71,14 @@ function setup() {
 	const notices: string[] = [];
 	const keys: string[] = [];
 	let menuLines: string[] = [];
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "classifier-cwd-"));
+	fs.mkdirSync(path.join(cwd, ".pi", "output-rules"), { recursive: true });
+	fs.writeFileSync(
+		path.join(cwd, ".pi", "output-rules", "tldr.md"),
+		"# TLDR\nLead with the answer.",
+	);
 	const ctx = {
-		cwd: process.cwd(),
+		cwd,
 		hasUI: true,
 		mode: "tui",
 		ui: {
@@ -149,6 +160,16 @@ test("no-comments ignores comment lookalikes in literals", () => {
 		"",
 	].join("\n");
 	assert.equal(runNoComments(source).code, 0);
+});
+
+test("session_start with no rules shows it in the status bar", async () => {
+	const app = setup();
+	app.ctx.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "no-rules-"));
+	await app.handlers.session_start({}, app.ctx);
+	assert.match(app.badge(), /classifier \(no rules\)/);
+	assert.deepEqual(app.notices, [
+		"Classifier: no rules installed. Run /classifier-install to pick one from the catalog.",
+	]);
 });
 
 test("session_start shows classifier state in the status bar", async () => {
@@ -352,7 +373,9 @@ test("tool_call fails open and counts project tool rules", async () => {
 	);
 	const bare = setup();
 	await bare.handlers.session_start({}, { ...bare.ctx, cwd: os.tmpdir() });
-	const baseline = Number(bare.badge().match(/classifier \((\d+)\)/)?.[1]);
+	const baseline = Number(
+		bare.badge().match(/classifier \((\d+)\)/)?.[1] ?? "0",
+	);
 	const ctx = { ...app.ctx, cwd };
 	await app.handlers.session_start({}, ctx);
 	assert.match(app.badge(), new RegExp(`classifier \\(${baseline + 1}\\)`));
@@ -460,4 +483,17 @@ test("a once rule with no message keeps the judge reason", () => {
 			spent: ["brevity.md"],
 		},
 	);
+});
+
+test("parseCatalog keeps only .md files with a download url", () => {
+	assert.deepEqual(
+		parseCatalog([
+			{ name: "tldr.md", download_url: "https://x/tldr.md" },
+			{ name: "README.txt", download_url: "https://x/README.txt" },
+			{ name: "broken.md" },
+			"junk",
+		]),
+		[{ name: "tldr.md", downloadUrl: "https://x/tldr.md" }],
+	);
+	assert.deepEqual(parseCatalog({ message: "rate limited" }), []);
 });

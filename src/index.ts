@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { uuidv7 } from "@earendil-works/pi-ai";
 import { complete } from "@earendil-works/pi-ai/compat";
 import {
@@ -26,12 +25,17 @@ const STATUS_KEY = "auto-classifier";
 const FEEDBACK_MESSAGE_TYPE = "auto-classifier";
 const PROJECT_RULES_DIR = path.join(".pi", "output-rules");
 const PROJECT_TOOL_RULES_DIR = path.join(".pi", "tool-rules");
-const USER_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
-const GLOBAL_RULES_DIR = path.join(
-	path.dirname(fileURLToPath(import.meta.url)),
-	"..",
-	"rules",
-);
+function userDir(): string {
+	return (
+		process.env.PI_AUTO_CLASSIFIER_USER_DIR ??
+		path.join(os.homedir(), CONFIG_DIR_NAME, "agent")
+	);
+}
+function userRulesDir(): string {
+	return path.join(userDir(), "output-rules");
+}
+const CATALOG_URL =
+	"https://api.github.com/repos/marcoskichel/pi-auto-classifier/contents/rules";
 const MAX_TOOL_INPUT_CHARS = 4000;
 const MAX_USER_REQUEST_CHARS = 2000;
 const FEEDBACK_PREFIX = "Your draft reply below was withheld";
@@ -51,6 +55,7 @@ const ENABLED_MARK = "\u25CF";
 const DISABLED_MARK = "\u25CB";
 
 type Rule = { name: string; text: string; once?: string };
+export type CatalogEntry = { name: string; downloadUrl: string };
 type Violation = { rule: string; reason: string };
 type Verdict = {
 	pass: boolean;
@@ -127,15 +132,40 @@ export function parseRule(name: string, raw: string): Rule {
 
 function loadRules(cwd: string): Rule[] {
 	return [
-		...readRulesFromDir(GLOBAL_RULES_DIR),
-		...readRulesFromDir(path.join(USER_DIR, "output-rules")),
+		...readRulesFromDir(userRulesDir()),
 		...readRulesFromDir(path.join(cwd, PROJECT_RULES_DIR)),
 	];
 }
 
+export function parseCatalog(json: unknown): CatalogEntry[] {
+	if (!Array.isArray(json)) {
+		return [];
+	}
+	return json.flatMap((file) => {
+		const fields = file as { name?: unknown; download_url?: unknown };
+		return typeof fields.name === "string" &&
+			fields.name.endsWith(".md") &&
+			typeof fields.download_url === "string"
+			? [{ name: fields.name, downloadUrl: fields.download_url }]
+			: [];
+	});
+}
+
+async function fetchText(url: string): Promise<string> {
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`HTTP ${response.status} for ${url}`);
+	}
+	return response.text();
+}
+
+async function fetchCatalog(): Promise<CatalogEntry[]> {
+	return parseCatalog(JSON.parse(await fetchText(CATALOG_URL)));
+}
+
 function loadToolRules(cwd: string): Rule[] {
 	return [
-		...readRulesFromDir(path.join(USER_DIR, "tool-rules")),
+		...readRulesFromDir(path.join(userDir(), "tool-rules")),
 		...readRulesFromDir(path.join(cwd, PROJECT_TOOL_RULES_DIR)),
 	];
 }
@@ -471,12 +501,16 @@ class Classifier {
 		this.modelSpec = resolveModelSpec(ctx.cwd);
 		const saved = readConfigFile(globalConfigPath());
 		this.isEnabled = saved.enabled !== false;
+		if (ctx.hasUI && this.rules.length + this.toolRules.length === 0) {
+			ctx.ui.notify(
+				"Classifier: no rules installed. Run /classifier-install to pick one from the catalog.",
+				"warning",
+			);
+		}
 		for (const name of saved.disabledRules ?? []) {
 			this.disabledRules.add(name);
 		}
-		if (this.rules.length + this.toolRules.length > 0) {
-			this.showIdleStatus(ctx);
-		}
+		this.showIdleStatus(ctx);
 	}
 
 	private activeRules(rules: Rule[]): Rule[] {
@@ -674,6 +708,45 @@ class Classifier {
 		this.showIdleStatus(ctx);
 	}
 
+	private async pickCatalogRule(
+		ctx: ExtensionContext,
+	): Promise<CatalogEntry | undefined> {
+		const installed = new Set(loadRules(ctx.cwd).map((rule) => rule.name));
+		const available = (await fetchCatalog()).filter(
+			(entry) => !installed.has(entry.name),
+		);
+		if (available.length === 0) {
+			ctx.ui.notify("No new rules available in the catalog", "info");
+			return undefined;
+		}
+		const choice = await ctx.ui.select(
+			"Install a rule to ~/.pi/agent/output-rules/",
+			available.map((entry) => entry.name),
+		);
+		return available.find((candidate) => candidate.name === choice);
+	}
+
+	async installRule(ctx: ExtensionContext): Promise<void> {
+		if (!ctx.hasUI) {
+			return;
+		}
+		try {
+			const entry = await this.pickCatalogRule(ctx);
+			if (!entry) {
+				return;
+			}
+			const text = await fetchText(entry.downloadUrl);
+			fs.mkdirSync(userRulesDir(), { recursive: true });
+			fs.writeFileSync(path.join(userRulesDir(), entry.name), text);
+			this.rules = loadRules(ctx.cwd);
+			this.showIdleStatus(ctx);
+			ctx.ui.notify(`Installed ${entry.name}`, "info");
+		} catch (error) {
+			debugLog(`install failed: ${String(error)}`);
+			ctx.ui.notify(`Rule install failed: ${String(error)}`, "error");
+		}
+	}
+
 	async openMenu(ctx: ExtensionContext): Promise<void> {
 		if (ctx.mode !== "tui") {
 			this.toggle(ctx);
@@ -793,13 +866,32 @@ class Classifier {
 	}
 
 	private showIdleStatus(ctx: ExtensionContext): void {
-		this.setStatus(
-			ctx,
-			this.isEnabled
-				? `${ENABLED_MARK} classifier (${this.activeRules(this.rules).length + this.activeRules(this.toolRules).length})`
-				: `${DISABLED_MARK} classifier off`,
-		);
+		if (!this.isEnabled) {
+			this.setStatus(ctx, `${DISABLED_MARK} classifier off`);
+			return;
+		}
+		if (this.rules.length + this.toolRules.length === 0) {
+			this.setStatus(ctx, `${DISABLED_MARK} classifier (no rules)`);
+			return;
+		}
+		const count =
+			this.activeRules(this.rules).length +
+			this.activeRules(this.toolRules).length;
+		this.setStatus(ctx, `${ENABLED_MARK} classifier (${count})`);
 	}
+}
+
+function registerCommands(pi: ExtensionAPI, classifier: Classifier) {
+	pi.registerCommand("classifier", {
+		description:
+			"Toggle the classifier or individual rules (output rules in .pi/output-rules/, tool rules in .pi/tool-rules/)",
+		handler: async (_args, ctx) => classifier.openMenu(ctx),
+	});
+	pi.registerCommand("classifier-install", {
+		description:
+			"Pick a rule from the catalog on GitHub and install it to ~/.pi/agent/output-rules/",
+		handler: async (_args, ctx) => classifier.installRule(ctx),
+	});
 }
 
 export default function autoClassifier(pi: ExtensionAPI) {
@@ -823,9 +915,5 @@ export default function autoClassifier(pi: ExtensionAPI) {
 	);
 	pi.on("input", async (event) => classifier.captureUserRequest(event.text));
 	pi.on("tool_call", async (event, ctx) => classifier.onToolCall(event, ctx));
-	pi.registerCommand("classifier", {
-		description:
-			"Toggle the classifier or individual rules (output rules in .pi/output-rules/, tool rules in .pi/tool-rules/)",
-		handler: async (_args, ctx) => classifier.openMenu(ctx),
-	});
+	registerCommands(pi, classifier);
 }
