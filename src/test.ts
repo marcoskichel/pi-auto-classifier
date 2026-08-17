@@ -158,7 +158,7 @@ test("no-comments ignores comment lookalikes in literals", () => {
 	assert.equal(runNoComments(source).code, 0);
 });
 
-test("session_start with no rules points at /classifier-install", async () => {
+test("session_start with no rules shows it in the status bar", async () => {
 	process.env.PI_AUTO_CLASSIFIER_USER_DIR = fs.mkdtempSync(
 		path.join(os.tmpdir(), "empty-user-"),
 	);
@@ -166,7 +166,7 @@ test("session_start with no rules points at /classifier-install", async () => {
 		const app = setup();
 		app.ctx.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "no-rules-"));
 		await app.handlers.session_start({}, app.ctx);
-		assert.match(app.badge(), /no rules \(\/classifier-install\)/);
+		assert.match(app.badge(), /classifier \(no rules\)/);
 	} finally {
 		delete process.env.PI_AUTO_CLASSIFIER_USER_DIR;
 	}

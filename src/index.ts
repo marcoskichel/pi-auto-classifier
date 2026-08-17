@@ -870,7 +870,7 @@ class Classifier {
 		this.setStatus(
 			ctx,
 			count === 0
-				? `${DISABLED_MARK} classifier no rules (/classifier-install)`
+				? `${DISABLED_MARK} classifier (no rules)`
 				: `${ENABLED_MARK} classifier (${count})`,
 		);
 	}
