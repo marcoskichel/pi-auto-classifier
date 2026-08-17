@@ -14,7 +14,7 @@ Or add a local checkout to `~/.pi/agent/settings.json`:
 
 ```json
 {
-  "extensions": ["/path/to/pi-auto-classifier/index.ts"]
+  "extensions": ["/path/to/pi-auto-classifier/src/index.ts"]
 }
 ```
 
@@ -83,4 +83,4 @@ Set `PI_AUTO_CLASSIFIER_DEBUG=/path/to/log` to log classifier verdicts and error
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Code lives in `src/`: `index.ts` (the extension), `test.ts` (unit tests), `dev.ts` (local dev runner), `no-comments.ts` (lint script). See [CONTRIBUTING.md](CONTRIBUTING.md).

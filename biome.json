@@ -29,7 +29,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["test.ts"],
+			"includes": ["src/test.ts"],
 			"linter": {
 				"rules": {
 					"suspicious": {
