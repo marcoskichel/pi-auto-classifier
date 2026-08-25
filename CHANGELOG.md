@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v2.0.1...pi-auto-classifier-v2.0.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* show each rule's own mark when the classifier is off ([#55](https://github.com/marcoskichel/pi-auto-classifier/issues/55)) ([70416c4](https://github.com/marcoskichel/pi-auto-classifier/commit/70416c43567d378856930f861055e33ddae7c618))
+
 ## [2.0.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v2.0.0...pi-auto-classifier-v2.0.1) (2026-08-25)
 
 
