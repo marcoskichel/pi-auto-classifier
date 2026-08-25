@@ -691,7 +691,7 @@ class Classifier {
 			`${this.isEnabled ? ENABLED_MARK : DISABLED_MARK} classifier (all rules)`,
 			...[...this.rules, ...this.toolRules].map(
 				(rule) =>
-					`${this.isEnabled && !this.disabledRules.has(rule.name) ? ENABLED_MARK : DISABLED_MARK} ${rule.name}`,
+					`${this.disabledRules.has(rule.name) ? DISABLED_MARK : ENABLED_MARK} ${rule.name}`,
 			),
 		];
 	}
