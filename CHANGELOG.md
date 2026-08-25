@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v2.0.0...pi-auto-classifier-v2.0.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* accept kitty protocol keys in the classifier menu ([#53](https://github.com/marcoskichel/pi-auto-classifier/issues/53)) ([e14dcaf](https://github.com/marcoskichel/pi-auto-classifier/commit/e14dcaf466758ff609c46c3c0b5076a173492736))
+
 ## [2.0.0](https://github.com/marcoskichel/pi-auto-classifier/compare/pi-auto-classifier-v1.4.2...pi-auto-classifier-v2.0.0) (2026-08-17)
 
 
