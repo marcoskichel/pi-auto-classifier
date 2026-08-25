@@ -211,6 +211,18 @@ test("menu toggles a rule back on", async () => {
 	assert.match(app.badge(), new RegExp(`classifier \\(${total}\\)`));
 });
 
+test("menu answers kitty protocol key sequences", async () => {
+	const app = setup();
+	await app.handlers.session_start({}, app.ctx);
+	const total = Number(app.badge().match(/classifier \((\d+)\)/)?.[1]);
+	app.keys.push("\u001b[B", "\u001b[13u", "\u001b[27u");
+	await app.commands.classifier.handler([], app.ctx);
+	assert.match(app.badge(), new RegExp(`classifier \\(${total - 1}\\)`));
+	app.keys.push("\u001b[B", "\u001b[13u", "\u001b[27u");
+	await app.commands.classifier.handler([], app.ctx);
+	assert.match(app.badge(), new RegExp(`classifier \\(${total}\\)`));
+});
+
 test("s saves toggles and a new session restores them", async () => {
 	const config = path.join(
 		fs.mkdtempSync(path.join(os.tmpdir(), "classifier-config-")),
