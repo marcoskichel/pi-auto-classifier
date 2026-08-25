@@ -9,7 +9,7 @@ import {
 	type ExtensionContext,
 	keyText,
 } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Key, matchesKey, Text } from "@earendil-works/pi-tui";
 
 const DEFAULT_MODEL_SPEC = "anthropic/claude-haiku-4-5";
 const CONFIG_FILE_NAME = "auto-classifier.json";
@@ -780,15 +780,15 @@ class Classifier {
 			},
 			handleInput: (data: string) => {
 				const rows = this.menuRows().length;
-				if (data === "\u001b[A") {
+				if (matchesKey(data, Key.up) || matchesKey(data, "k")) {
 					cursor = (cursor - 1 + rows) % rows;
-				} else if (data === "\u001b[B") {
+				} else if (matchesKey(data, Key.down) || matchesKey(data, "j")) {
 					cursor = (cursor + 1) % rows;
-				} else if (data === "\r" || data === "\n" || data === " ") {
+				} else if (matchesKey(data, Key.enter) || matchesKey(data, Key.space)) {
 					this.toggleRow(cursor, ctx);
-				} else if (data === "s" || data === "S") {
+				} else if (matchesKey(data, "s")) {
 					this.saveState(ctx);
-				} else if (data === "\u001b" || data === "\u0003") {
+				} else if (matchesKey(data, Key.escape) || matchesKey(data, "ctrl+c")) {
 					done();
 					return;
 				}
